@@ -16,6 +16,4 @@ RUN npx prisma generate
 
 EXPOSE 8080
 
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-ENTRYPOINT ["docker-entrypoint.sh"]
+ENTRYPOINT ["npm", "run", "start:stack"]
