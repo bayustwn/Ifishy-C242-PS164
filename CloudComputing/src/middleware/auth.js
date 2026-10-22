@@ -1,5 +1,6 @@
-const jwt = require('jsonwebtoken');
-const secretKey = process.env.JWT_SECRET;
+const { jwtVerify } = require('jose');
+
+const encoder = new TextEncoder();
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.header('Authorization');
@@ -12,31 +13,33 @@ const authenticateToken = (req, res, next) => {
   }
 
   const token = authHeader.replace('Bearer ', '');
+  const secret = encoder.encode(process.env.JWT_SECRET);
 
-  try {
-    const decoded = jwt.verify(token, secretKey);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    console.error('Invalid token', error);
+  return jwtVerify(token, secret)
+    .then(({ payload }) => {
+      req.user = payload;
+      next();
+    })
+    .catch((error) => {
+      console.error('Invalid token', error);
 
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Token expired, please login again',
-      });
-    } else if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid token, please login again',
-      });
-    } else {
+      if (error.code === 'ERR_JWT_EXPIRED') {
+        return res.status(401).json({
+          success: false,
+          message: 'Token expired, please login again',
+        });
+      }
+      if (error.code === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' || error.code === 'ERR_JWS_INVALID') {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid token, please login again',
+        });
+      }
       return res.status(500).json({
         success: false,
         message: 'An error occurred during token verification',
       });
-    }
-  }
+    });
 };
 
 module.exports = { authenticateToken };
