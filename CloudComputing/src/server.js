@@ -1,12 +1,23 @@
 const dotenv = require('dotenv');
 dotenv.config();
+
+const logger = require('./shared/logger');
+const { validateEnv } = require('./shared/env');
+
+try {
+  validateEnv();
+} catch (error) {
+  logger.fatal(error.message);
+  process.exit(1);
+}
+
 const app = require('./app');
 const prisma = require('./shared/prisma');
 const { closeLimiter } = require('./shared/rateLimit');
 
 const PORT = process.env.PORT || 8080;
 const server = app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  logger.info(`Server is running on port ${PORT}`);
 });
 
 const shutdown = async () => {

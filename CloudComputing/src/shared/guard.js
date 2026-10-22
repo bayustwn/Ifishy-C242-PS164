@@ -1,9 +1,11 @@
+const logger = require('./logger');
+
 const guard = (label, message, handler) =>
   async (req, res) => {
     try {
       await handler(req, res);
     } catch (error) {
-      console.error(`${label}:`, error);
+      logger.error({ err: error }, label);
       res.status(500).json({ success: false, message });
     }
   };

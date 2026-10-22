@@ -1,4 +1,5 @@
 const prisma = require('../../shared/prisma');
+const { sliceArgs } = require('../../shared/pagination');
 
 const saveScanHistory = async (userId, { fishImage, disease, confidence, description, treatment, validation }) => {
   const created = await prisma.scanHistory.create({
@@ -33,10 +34,11 @@ const toScanShape = ({ id, userId, fishImage, disease, confidence, description, 
   scanTimestamp,
 });
 
-const getScanHistoriesByUserId = async (userId) => {
+const getScanHistoriesByUserId = async (userId, opts = {}) => {
   const histories = await prisma.scanHistory.findMany({
     where: { userId },
     orderBy: { scanTimestamp: 'desc' },
+    ...sliceArgs(opts),
   });
   return histories.map(toScanShape);
 };

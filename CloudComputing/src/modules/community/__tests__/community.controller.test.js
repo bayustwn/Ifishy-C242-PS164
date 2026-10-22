@@ -86,7 +86,7 @@ describe('community.controller', () => {
     service.getPosts.mockResolvedValue([{ id: 1 }]);
     let res = makeRes();
     await controller.getPosts(req(), res);
-    expect(service.getPosts).toHaveBeenCalledWith(9);
+    expect(service.getPosts).toHaveBeenCalledWith(9, {});
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ success: true, posts: [{ id: 1 }] });
 
@@ -160,13 +160,13 @@ describe('community.controller', () => {
     service.getComments.mockResolvedValue([{ id: 11 }]);
     let res = makeRes();
     await controller.getComments(req({ params: { postId: 'abc' } }), res);
-    expect(service.getComments).toHaveBeenCalledWith(-1, 9);
+    expect(service.getComments).toHaveBeenCalledWith(-1, 9, {});
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ success: true, comments: [{ id: 11 }] });
 
     res = makeRes();
     await controller.getComments(req({ params: { postId: '5' } }), res);
-    expect(service.getComments).toHaveBeenCalledWith(5, 9);
+    expect(service.getComments).toHaveBeenCalledWith(5, 9, {});
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ success: true, comments: [{ id: 11 }] });
   });
@@ -205,14 +205,6 @@ describe('community.controller', () => {
     expect(res.json).toHaveBeenCalledWith({ success: true, message: 'Reply added successfully' });
   });
 
-  test('getCommentsWithReplies: guard non-numeric → -1; passthrough', async () => {
-    service.getCommentsWithReplies.mockResolvedValue([]);
-    const res = makeRes();
-    await controller.getCommentsWithReplies(req({ params: { postId: 'abc' } }), res);
-    expect(service.getCommentsWithReplies).toHaveBeenCalledWith(-1);
-    expect(res.status).toHaveBeenCalledWith(200);
-  });
-
   test('addLikeToComment: already → 400; sukses → 200', async () => {
     service.addLikeToComment.mockResolvedValueOnce('already_liked');
     let res = makeRes();
@@ -247,7 +239,7 @@ describe('community.controller', () => {
 
     await controller.getLikedCommentsByUser(req(), res);
 
-    expect(service.getLikedCommentsByUser).toHaveBeenCalledWith(9);
+    expect(service.getLikedCommentsByUser).toHaveBeenCalledWith(9, {});
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ success: true, likedComments: [{ id: 11 }] });
   });

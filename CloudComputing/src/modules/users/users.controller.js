@@ -1,18 +1,14 @@
-const { jwtVerify } = require('jose');
 const guard = require('../../shared/guard');
+const { parsePagination } = require('../../shared/pagination');
+const { verifyToken } = require('../../shared/token');
 const usersService = require('./users.service');
 const { updateUserSchema, photoUserIdSchema, emailParamsSchema } = require('./users.schema');
 const { saveFileToDisk, profileFolder } = require('../../shared/storage');
 
-const encoder = new TextEncoder();
-
-const getUserIdFromToken = async (token) => {
-  const { payload } = await jwtVerify(token, encoder.encode(process.env.JWT_SECRET));
-  return payload.id;
-};
+const getUserIdFromToken = async (token) => (await verifyToken(token)).id;
 
 const getAllUsers = guard('Error fetching users', 'Failed to fetch users', async (req, res) => {
-  const users = await usersService.getAllUsers();
+  const users = await usersService.getAllUsers(parsePagination(req.query));
   return res.status(200).json({ success: true, users });
 });
 

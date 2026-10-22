@@ -1,5 +1,10 @@
 const puppeteer = require('puppeteer');
 const prisma = require('../../shared/prisma');
+const cache = require('../../shared/cache');
+const logger = require('../../shared/logger');
+const { sliceArgs } = require('../../shared/pagination');
+
+const CACHE_KEY = 'articles:list:v1';
 
 const toArticleRow = ({ id, title, content, author, publishedAt, coverImage }) => ({
   id,
@@ -16,9 +21,22 @@ const getArticleById = async (id) => {
   return article ? toArticleRow(article) : null;
 };
 
-const getAllArticles = async () => {
-  const articles = await prisma.article.findMany({ orderBy: { publishedAt: 'desc' } });
-  return articles.map(toArticleRow);
+const getAllArticles = async (opts = {}) => {
+  const paged = Object.keys(sliceArgs(opts)).length > 0;
+
+  if (!paged) {
+    const cached = await cache.get(CACHE_KEY);
+    if (cached) return cached;
+  }
+
+  const articles = await prisma.article.findMany({
+    orderBy: { publishedAt: 'desc' },
+    ...sliceArgs(opts),
+  });
+  const rows = articles.map(toArticleRow);
+
+  if (!paged) await cache.set(CACHE_KEY, rows, 60);
+  return rows;
 };
 
 const scrapeArticle = async (url) => {
@@ -65,7 +83,7 @@ const scrapeArticle = async (url) => {
 
     return { ...result, success: true };
   } catch (error) {
-    console.error('Error scraping article:', error);
+    logger.error({ err: error }, 'Error scraping article');
     return { success: false, message: 'Failed to scrape article' };
   } finally {
     if (browser) await browser.close().catch(() => {});
@@ -85,6 +103,8 @@ const fetchAndSaveFromUrl = async (fullUrl) => {
   const created = await prisma.article.create({
     data: { title, content, author, publishedAt, coverImage },
   });
+
+  await cache.del(CACHE_KEY);
 
   return { articleId: created.id };
 };

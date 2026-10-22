@@ -1,4 +1,5 @@
 const guard = require('../../shared/guard');
+const { parsePagination } = require('../../shared/pagination');
 const articlesService = require('./articles.service');
 const { scrapeParamsSchema } = require('./articles.schema');
 
@@ -12,7 +13,7 @@ const getArticleById = guard('Error fetching article', 'Failed to fetch article'
 });
 
 const getAllArticles = guard('Error fetching articles', 'Failed to fetch articles', async (req, res) => {
-  const articles = await articlesService.getAllArticles();
+  const articles = await articlesService.getAllArticles(parsePagination(req.query));
   return res.status(200).json({ success: true, message: 'Articles fetched successfully', data: articles });
 });
 

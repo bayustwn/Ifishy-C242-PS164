@@ -1,7 +1,7 @@
 const express = require('express');
 const { authenticateToken } = require('../../middleware/auth');
 const upload = require('../../middleware/upload');
-const { createPost, updatePost, getPosts, getPostById, addShareToPost, addComment, getComments, getCommentsById, addReplyToComment, getCommentsWithReplies, addLikeToComment, removeLikeFromComment, getLikedCommentsByUser, addUpvoteToPost, addDownvoteToPost, getVoteStatusById, removeUpvoteFromPost, removeDownvoteFromPost } = require('./community.controller');
+const { createPost, updatePost, getPosts, getPostById, addShareToPost, addComment, getComments, getCommentsById, addReplyToComment, addLikeToComment, removeLikeFromComment, getLikedCommentsByUser, addUpvoteToPost, addDownvoteToPost, getVoteStatusById, removeUpvoteFromPost, removeDownvoteFromPost } = require('./community.controller');
 
 const router = express.Router();
 
@@ -14,7 +14,6 @@ router.post('/community/posts/:postId/comments', authenticateToken, addComment);
 router.get('/community/posts/:postId/comments', authenticateToken, getComments);
 router.get('/community/comments/:commentId', authenticateToken, getCommentsById);
 router.post('/comments/:commentId/reply', authenticateToken, addReplyToComment);
-router.get('/community/posts/:postId/comments', authenticateToken, getCommentsWithReplies);
 router.post('/comments/:commentId/like', authenticateToken, addLikeToComment);
 router.delete('/comments/:commentId/like', authenticateToken, removeLikeFromComment);
 router.get('/users/likes', authenticateToken, getLikedCommentsByUser);

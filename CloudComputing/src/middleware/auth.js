@@ -1,6 +1,5 @@
-const { jwtVerify } = require('jose');
-
-const encoder = new TextEncoder();
+const logger = require('../shared/logger');
+const { verifyToken } = require('../shared/token');
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.header('Authorization');
@@ -13,15 +12,14 @@ const authenticateToken = (req, res, next) => {
   }
 
   const token = authHeader.replace('Bearer ', '');
-  const secret = encoder.encode(process.env.JWT_SECRET);
 
-  return jwtVerify(token, secret)
-    .then(({ payload }) => {
+  return verifyToken(token)
+    .then((payload) => {
       req.user = payload;
       next();
     })
     .catch((error) => {
-      console.error('Invalid token', error);
+      logger.error({ err: error }, 'Invalid token');
 
       if (error.code === 'ERR_JWT_EXPIRED') {
         return res.status(401).json({

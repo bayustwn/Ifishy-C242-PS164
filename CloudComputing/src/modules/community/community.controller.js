@@ -1,5 +1,6 @@
 const guard = require('../../shared/guard');
 const firstIssueMessage = require('../../shared/validation');
+const { parsePagination } = require('../../shared/pagination');
 const community = require('./community.service');
 const { saveFileToDisk, postFolder } = require('../../shared/storage');
 const { postBodySchema, addCommentSchema, addReplySchema } = require('./community.schema');
@@ -63,7 +64,7 @@ const updatePost = guard('Error in updatePost', 'Failed to update post', async (
 const getPosts = guard('Error in getPosts', 'Failed to retrieve posts', async (req, res) => {
   const userId = req.user.id;
 
-  const posts = await community.getPosts(userId);
+  const posts = await community.getPosts(userId, parsePagination(req.query));
 
   res.status(200).json({
     success: true,
@@ -147,7 +148,7 @@ const getComments = guard('Error in getComments', 'Failed to retrieve comments',
   const postId = isNumericId(rawPostId) ? Number(rawPostId) : -1;
   const userId = req.user.id;
 
-  const comments = await community.getComments(postId, userId);
+  const comments = await community.getComments(postId, userId, parsePagination(req.query));
 
   res.status(200).json({
     success: true,
@@ -197,18 +198,6 @@ const addReplyToComment = guard('Error adding reply to comment', 'Failed to add 
   });
 });
 
-const getCommentsWithReplies = guard('Error in getCommentsWithReplies', 'Failed to retrieve comments and replies', async (req, res) => {
-  const rawPostId = req.params.postId;
-  const postId = isNumericId(rawPostId) ? Number(rawPostId) : -1;
-
-  const comments = await community.getCommentsWithReplies(postId);
-
-  res.status(200).json({
-    success: true,
-    comments,
-  });
-});
-
 const addLikeToComment = guard('Error adding like to comment', 'Failed to add like to comment', async (req, res) => {
   const result = await community.addLikeToComment(Number(req.params.commentId), req.user.id);
 
@@ -242,7 +231,7 @@ const removeLikeFromComment = guard('Error removing like from comment', 'Failed 
 });
 
 const getLikedCommentsByUser = guard('Error in getLikedCommentsByUser', 'Failed to retrieve liked comments', async (req, res) => {
-  const likedComments = await community.getLikedCommentsByUser(req.user.id);
+  const likedComments = await community.getLikedCommentsByUser(req.user.id, parsePagination(req.query));
 
   res.status(200).json({
     success: true,
@@ -320,4 +309,4 @@ const removeDownvoteFromPost = guard('Error removing downvote', 'Failed to remov
   });
 });
 
-module.exports = { createPost, updatePost, getPosts, getPostById, addShareToPost, addComment, getComments, getCommentsById, addReplyToComment, getCommentsWithReplies, addLikeToComment, removeLikeFromComment, getLikedCommentsByUser, addUpvoteToPost, addDownvoteToPost, getVoteStatusById, removeUpvoteFromPost, removeDownvoteFromPost };
+module.exports = { createPost, updatePost, getPosts, getPostById, addShareToPost, addComment, getComments, getCommentsById, addReplyToComment, addLikeToComment, removeLikeFromComment, getLikedCommentsByUser, addUpvoteToPost, addDownvoteToPost, getVoteStatusById, removeUpvoteFromPost, removeDownvoteFromPost };

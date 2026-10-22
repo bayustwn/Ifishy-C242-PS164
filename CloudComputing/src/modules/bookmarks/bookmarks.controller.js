@@ -1,4 +1,5 @@
 const guard = require('../../shared/guard');
+const { parsePagination } = require('../../shared/pagination');
 const bookmarkService = require('./bookmarks.service');
 const { createBookmarkSchema, bookmarkIdSchema } = require('./bookmarks.schema');
 
@@ -27,7 +28,7 @@ const removeBookmark = guard('Error removing bookmark', 'Failed to remove bookma
 });
 
 const getBookmarks = guard('Error fetching bookmarks', 'Failed to retrieve bookmarks', async (req, res) => {
-  const bookmarks = await bookmarkService.getBookmarks(req.user.id);
+  const bookmarks = await bookmarkService.getBookmarks(req.user.id, parsePagination(req.query));
   return res.status(200).json({ success: true, bookmarks });
 });
 

@@ -1,4 +1,6 @@
 const prisma = require('../../shared/prisma');
+const logger = require('../../shared/logger');
+const { sliceArgs } = require('../../shared/pagination');
 
 const minutesAgo = (createdAt) => {
   const minutes = Math.floor((Date.now() - new Date(createdAt)) / 60000);
@@ -16,7 +18,7 @@ const profilePictures = async (userIds) => {
     for (const row of rows) pictureMap.set(row.id, row.profilePhoto || '');
     return pictureMap;
   } catch (error) {
-    console.error('Error getting profile pictures from database:', error);
+    logger.error({ err: error }, 'Error getting profile pictures from database');
     return new Map();
   }
 };
@@ -70,13 +72,16 @@ const aggregateVotes = (voteGroups) => {
   return { likeCounts, voteCounts };
 };
 
-const getPosts = async (userId) => {
+const getPosts = async (userId, opts = {}) => {
   const posts = await prisma.post.findMany({
     orderBy: { createdAt: 'desc' },
     select: POST_SELECT,
+    ...sliceArgs(opts),
   });
 
   const postIds = posts.map((p) => p.id);
+  if (postIds.length === 0) return [];
+
   const voteGroups = postIds.length
     ? await prisma.postVote.groupBy({ by: ['postId', 'voteType'], _count: { _all: true }, where: { postId: { in: postIds } } })
     : [];
@@ -95,6 +100,7 @@ const getPosts = async (userId) => {
 
   const comments = await prisma.comment.findMany({
     orderBy: { createdAt: 'asc' },
+    where: { postId: { in: postIds } },
     select: { id: true, content: true, createdAt: true, postId: true, user: { select: { username: true } } },
   });
   const commentsByPost = {};
@@ -134,8 +140,7 @@ const getPostById = async (postId) => {
   });
 
   const likeCount = await prisma.postVote.count({ where: { postId, voteType: 'upvote' } });
-  // perilaku lama: share_count ternyata dihitung dari post_votes (bukan shares) — direplikasi
-  const shareCount = await prisma.postVote.count({ where: { postId } });
+  const shareCount = await prisma.share.count({ where: { postId } });
 
   return {
     ...toPostCore(post),
@@ -172,7 +177,7 @@ const toReplyShape = (r) => ({
   username: r.user.username,
 });
 
-const getComments = async (postId, userId) => {
+const getComments = async (postId, userId, opts = {}) => {
   const comments = await prisma.comment.findMany({
     where: { postId },
     orderBy: { createdAt: 'asc' },
@@ -180,6 +185,7 @@ const getComments = async (postId, userId) => {
       id: true, content: true, createdAt: true, userId: true, user: { select: { username: true } },
       _count: { select: { likes: true } },
     },
+    ...sliceArgs(opts),
   });
 
   const commentIds = comments.map((c) => c.id);
@@ -279,46 +285,6 @@ const addReplyToComment = async (commentId, userId, content) => {
   return 'ok';
 };
 
-const getCommentsWithReplies = async (postId) => {
-  const comments = await prisma.comment.findMany({
-    where: { postId },
-    orderBy: { createdAt: 'asc' },
-    select: {
-      id: true, content: true, createdAt: true, user: { select: { username: true } },
-      _count: { select: { likes: true } },
-    },
-  });
-
-  const commentIds = comments.map((c) => c.id);
-  const replies = commentIds.length
-    ? await prisma.reply.findMany({
-        where: { parentCommentId: { in: commentIds } },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true, content: true, createdAt: true, parentCommentId: true, user: { select: { username: true } } },
-      })
-    : [];
-  const repliesByComment = {};
-  for (const r of replies) {
-    (repliesByComment[r.parentCommentId] ??= []).push({
-      id: r.id,
-      content: r.content,
-      created_at: r.createdAt,
-      username: r.user.username,
-      timeSinceReplied: minutesAgo(r.createdAt),
-    });
-  }
-
-  return comments.map((c) => ({
-    id: c.id,
-    content: c.content,
-    created_at: c.createdAt,
-    username: c.user.username,
-    like_count: Number(c._count.likes),
-    timeSinceCommented: minutesAgo(c.createdAt),
-    replies: repliesByComment[c.id] ?? [],
-  }));
-};
-
 const addLikeToComment = async (commentId, userId) => {
   const existingLike = await prisma.like.findUnique({
     where: { commentId_userId: { commentId, userId } },
@@ -344,10 +310,11 @@ const removeLikeFromComment = async (commentId, userId) => {
   return 'ok';
 };
 
-const getLikedCommentsByUser = async (userId) => {
+const getLikedCommentsByUser = async (userId, opts = {}) => {
   const rows = await prisma.like.findMany({
     where: { userId },
     orderBy: { comment: { createdAt: 'desc' } },
+    ...sliceArgs(opts),
     select: {
       comment: {
         select: {
@@ -380,6 +347,7 @@ const addUpvoteToPost = async (postId, userId) => {
   if (existingVote?.voteType === 'upvote') return 'already_upvoted';
   if (existingVote?.voteType === 'downvote') {
     await prisma.postVote.deleteMany({ where: { postId, userId } });
+    await prisma.post.update({ where: { id: postId }, data: { downvoteCount: { decrement: 1 } } });
   }
 
   await prisma.postVote.create({ data: { postId, userId, voteType: 'upvote' } });
@@ -428,7 +396,6 @@ module.exports = {
   getComments,
   getCommentsById,
   addReplyToComment,
-  getCommentsWithReplies,
   addLikeToComment,
   removeLikeFromComment,
   getLikedCommentsByUser,

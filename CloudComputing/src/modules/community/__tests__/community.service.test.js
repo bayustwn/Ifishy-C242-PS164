@@ -6,7 +6,7 @@ jest.mock('@prisma/client', () => ({
 const mockPrisma = {
   post: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), count: jest.fn() },
   postVote: { groupBy: jest.fn(), findMany: jest.fn(), count: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn(), deleteMany: jest.fn() },
-  share: { groupBy: jest.fn(), findFirst: jest.fn(), create: jest.fn() },
+  share: { groupBy: jest.fn(), findFirst: jest.fn(), create: jest.fn(), count: jest.fn() },
   comment: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), findFirst: jest.fn() },
   reply: { findMany: jest.fn(), create: jest.fn() },
   like: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), delete: jest.fn(), count: jest.fn(), groupBy: jest.fn() },
@@ -82,20 +82,19 @@ describe('community.service', () => {
     ]);
   });
 
-  test('getPosts tanpa post: agregasi dilewati, comments tetap di-query', async () => {
+  test('getPosts tanpa post: agregasi dan comments dilewati', async () => {
     prisma.post.findMany.mockResolvedValue([]);
-    prisma.comment.findMany.mockResolvedValue([]);
 
     const posts = await service.getPosts(9);
 
     expect(prisma.postVote.groupBy).not.toHaveBeenCalled();
     expect(prisma.share.groupBy).not.toHaveBeenCalled();
     expect(prisma.postVote.findMany).not.toHaveBeenCalled();
-    expect(prisma.comment.findMany).toHaveBeenCalled();
+    expect(prisma.comment.findMany).not.toHaveBeenCalled();
     expect(posts).toEqual([]);
   });
 
-  test('getPostById: likeCount = upvote, shareCount = semua post_votes (perilaku lama dipertahankan)', async () => {
+  test('getPostById: likeCount = upvote, shareCount dari shares', async () => {
     const d1 = toDate('2020-01-01T00:00:00Z');
     const d2 = toDate('2020-01-02T12:00:00Z');
     prisma.post.findFirst.mockResolvedValue({
@@ -104,12 +103,13 @@ describe('community.service', () => {
     prisma.comment.findMany.mockResolvedValue([
       { id: 11, content: 'hai', createdAt: d2, user: { username: 'budi' } },
     ]);
-    prisma.postVote.count.mockResolvedValueOnce(3).mockResolvedValueOnce(4);
+    prisma.postVote.count.mockResolvedValue(3);
+    prisma.share.count.mockResolvedValue(4);
 
     const post = await service.getPostById(2);
 
-    expect(prisma.postVote.count).toHaveBeenNthCalledWith(1, { where: { postId: 2, voteType: 'upvote' } });
-    expect(prisma.postVote.count).toHaveBeenNthCalledWith(2, { where: { postId: 2 } });
+    expect(prisma.postVote.count).toHaveBeenCalledWith({ where: { postId: 2, voteType: 'upvote' } });
+    expect(prisma.share.count).toHaveBeenCalledWith({ where: { postId: 2 } });
     expect(post).toEqual({
       id: 2, title: 'T', content: 'C', image_url: null, created_at: d1, user_id: 7, username: 'bayu',
       comments: [{ id: 11, content: 'hai', created_at: d2, username: 'budi', timeSinceCommented: MINUTES_AGO }],
@@ -213,26 +213,6 @@ describe('community.service', () => {
     expect(prisma.reply.create).toHaveBeenCalledWith({ data: { parentCommentId: 11, userId: 9, content: 'r' } });
   });
 
-  test('getCommentsWithReplies: like_count snake_case, replies tanpa like detail', async () => {
-    const d1 = toDate('2020-01-01T00:00:00Z');
-    const d2 = toDate('2020-01-02T00:00:00Z');
-    prisma.comment.findMany.mockResolvedValue([
-      { id: 11, content: 'c', createdAt: d1, user: { username: 'budi' }, _count: { likes: 4 } },
-    ]);
-    prisma.reply.findMany.mockResolvedValue([
-      { id: 31, content: 'r', createdAt: d2, parentCommentId: 11, user: { username: 'cita' } },
-    ]);
-
-    const comments = await service.getCommentsWithReplies(5);
-
-    expect(comments).toEqual([
-      {
-        id: 11, content: 'c', created_at: d1, username: 'budi', like_count: 4, timeSinceCommented: MINUTES_AGO,
-        replies: [{ id: 31, content: 'r', created_at: d2, username: 'cita', timeSinceReplied: MINUTES_AGO }],
-      },
-    ]);
-  });
-
   test('addLikeToComment: sudah ada → already_liked; baru → create + increment like_count', async () => {
     prisma.like.findUnique.mockResolvedValueOnce({ id: 5 });
     expect(await service.addLikeToComment(11, 9)).toBe('already_liked');
@@ -271,7 +251,7 @@ describe('community.service', () => {
     ]);
   });
 
-  test('addUpvoteToPost: duplikat upvote → 400-ish state; ganti arah → hapus lama; baru → insert + increment', async () => {
+  test('addUpvoteToPost: duplikat upvote → 400-ish state; ganti arah → hapus lama + turunkan downvoteCount; baru → insert + increment', async () => {
     prisma.postVote.findFirst.mockResolvedValueOnce({ voteType: 'upvote' });
     expect(await service.addUpvoteToPost(5, 9)).toBe('already_upvoted');
     expect(prisma.postVote.create).not.toHaveBeenCalled();
@@ -279,6 +259,7 @@ describe('community.service', () => {
     prisma.postVote.findFirst.mockResolvedValueOnce({ voteType: 'downvote' });
     expect(await service.addUpvoteToPost(5, 9)).toBe('ok');
     expect(prisma.postVote.deleteMany).toHaveBeenCalledWith({ where: { postId: 5, userId: 9 } });
+    expect(prisma.post.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { downvoteCount: { decrement: 1 } } });
     expect(prisma.postVote.create).toHaveBeenCalledWith({ data: { postId: 5, userId: 9, voteType: 'upvote' } });
     expect(prisma.post.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { upvoteCount: { increment: 1 } } });
 

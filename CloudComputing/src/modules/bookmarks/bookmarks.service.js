@@ -1,4 +1,5 @@
 const prisma = require('../../shared/prisma');
+const { sliceArgs } = require('../../shared/pagination');
 
 const addBookmark = async (userId, { itemId, type }) => {
   const existingBookmark = await prisma.bookmark.findFirst({
@@ -38,10 +39,11 @@ const toBookmarkShape = ({ id, type, itemId, createdAt }, title) => ({
   created_at: createdAt,
 });
 
-const getBookmarks = async (userId) => {
+const getBookmarks = async (userId, opts = {}) => {
   const bookmarks = await prisma.bookmark.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
+    ...sliceArgs(opts),
   });
 
   const postIds = [...new Set(bookmarks.filter((b) => b.type === 'post').map((b) => b.itemId))];

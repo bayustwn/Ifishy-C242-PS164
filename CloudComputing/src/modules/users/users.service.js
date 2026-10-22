@@ -1,10 +1,11 @@
 const bcrypt = require('bcrypt');
 const prisma = require('../../shared/prisma');
+const { sliceArgs } = require('../../shared/pagination');
 
 const publicColumns = { id: true, username: true, email: true };
 
-const getAllUsers = async () =>
-  prisma.user.findMany({ select: publicColumns });
+const getAllUsers = async (opts = {}) =>
+  prisma.user.findMany({ select: publicColumns, ...sliceArgs(opts) });
 
 const toProfileRow = ({ id, username, email, profilePhoto }) => ({
   id,

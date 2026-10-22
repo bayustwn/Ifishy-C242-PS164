@@ -78,7 +78,7 @@ describe('getBookmarks', () => {
     const res = await call(controller.getBookmarks, { user: { id: 1 } });
 
     expect(res.statusCode).toBe(200);
-    expect(bookmarkService.getBookmarks).toHaveBeenCalledWith(1);
+    expect(bookmarkService.getBookmarks).toHaveBeenCalledWith(1, {});
     expect(res.body.bookmarks).toEqual([]);
   });
 });

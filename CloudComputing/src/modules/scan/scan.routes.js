@@ -1,5 +1,4 @@
 const express = require('express');
-const { authenticateToken } = require('../../middleware/auth');
 const upload = require('../../middleware/upload');
 const { saveScanHistory, getScanHistoryById } = require('./scan.controller');
 

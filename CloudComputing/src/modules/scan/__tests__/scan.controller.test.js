@@ -100,7 +100,7 @@ describe('getScanHistoryById', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.message).toBe('Scan history berhasil diambil!');
-    expect(scanService.getScanHistoriesByUserId).toHaveBeenCalledWith(3);
+    expect(scanService.getScanHistoriesByUserId).toHaveBeenCalledWith(3, {});
     expect(res.body.data).toEqual([{ id: 2, confidence: 0.88 }]);
   });
 });
