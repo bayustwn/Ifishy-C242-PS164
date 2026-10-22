@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int    @id @default(autoincrement())
+  username     String @unique @db.VarChar(100)
+  email        String @unique @db.VarChar(150)
+  password     String @db.VarChar(255)
+  profilePhoto String? @map("profile_photo") @db.VarChar(500)
+
+  posts         Post[]
+  comments      Comment[]
+  replies       Reply[]
+  likes         Like[]
+  postVotes     PostVote[]
+  shares        Share[]
+  bookmarks     Bookmark[]
+  scanHistories ScanHistory[]
+
+  @@map("users")
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String   @db.VarChar(200)
+  content   String   @db.Text
+  imageUrl  String?  @map("image_url") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  postVotes PostVote[]
+  shares   Share[]
+
+  @@index([userId])
+  @@map("posts")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  userId    Int      @map("user_id")
+  content   String   @db.Text
+  likeCount Int      @default(0) @map("like_count")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post    Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replies Reply[]
+  likes   Like[]
+
+  @@index([postId])
+  @@map("comments")
+}
+
+model Reply {
+  id              Int      @id @default(autoincrement())
+  parentCommentId Int      @map("parent_comment_id")
+  userId          Int      @map("user_id")
+  content         String   @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  parentComment Comment @relation(fields: [parentCommentId], references: [id], onDelete: Cascade)
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([parentCommentId])
+  @@map("replies")
+}
+
+model Like {
+  id        Int      @id @default(autoincrement())
+  commentId Int      @map("comment_id")
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@map("likes")
+}
+
+enum VoteType {
+  upvote
+  downvote
+}
+
+model PostVote {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  userId    Int      @map("user_id")
+  voteType  VoteType @map("vote_type")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([postId, userId])
+  @@map("post_votes")
+}
+
+model Share {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("shares")
+}
+
+model Article {
+  id           Int       @id @default(autoincrement())
+  title        String    @db.VarChar(300)
+  content      String    @db.LongText
+  author       String?   @db.VarChar(150)
+  publishedAt  DateTime? @map("published_at")
+  coverImage   String?   @map("cover_image") @db.VarChar(500)
+
+  @@map("articles")
+}
+
+enum ItemType {
+  post
+  article
+}
+
+model Bookmark {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  type      ItemType
+  itemId    Int      @map("item_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, itemId])
+  @@map("bookmarks")
+}
+
+model ScanHistory {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  fishImage     String   @map("fish_image") @db.VarChar(500)
+  disease       String   @db.VarChar(150)
+  confidence    Float
+  description   String   @db.VarChar(1000)
+  treatment     String   @db.VarChar(1000)
+  validation    String?  @db.VarChar(1000)
+  scanTimestamp DateTime @map("scan_timestamp")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("scan_history")
+}

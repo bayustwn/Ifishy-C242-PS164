@@ -1,18 +1,26 @@
 const pool = require('../config/dbConfig');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const { Storage } = require('@google-cloud/storage');
 const puppeteer = require('puppeteer');
 
-const storage = new Storage({
-  projectId: 'bangkit-capstone-ps164',
-  keyFilename: './service-account-key.json',
-});
-
-const bucketName = 'ifishy-photos';
+// Local disk storage (replaces GCS for dev deploy)
+const fs = require('fs');
+const path = require('path');
+const bucketName = 'uploads';
 const profileFolder = 'photo-profile-user';
 const postFolder = 'image-post';
-const scanHistoryFolder = "scan-history";
+const scanHistoryFolder = 'scan-history';
+
+const saveFileToDisk = (req, file, folder) => new Promise((resolve, reject) => {
+  try {
+    const dir = path.join(__dirname, '..', 'uploads', folder);
+    fs.mkdirSync(dir, { recursive: true });
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileName = `${Date.now()}-${safeName}`;
+    fs.writeFileSync(path.join(dir, fileName), file.buffer);
+    resolve(`${req.protocol}://${req.get('host')}/uploads/${folder}/${fileName}`);
+  } catch (err) { reject(err); }
+});
 
 async function registerUser(req, res) {
   const { username, email, password, confirmPassword } = req.body;
@@ -235,32 +243,14 @@ const uploadProfilePhoto = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
-    const fileName = `${profileFolder}/${userId}-${Date.now()}-${file.originalname}`;
-    const blob = storage.bucket(bucketName).file(fileName);
-    const blobStream = blob.createWriteStream({
-      resumable: false,
-      contentType: file.mimetype,
+    const publicUrl = await saveFileToDisk(req, file, profileFolder);
+    await pool.query('UPDATE users SET profile_photo = ? WHERE id = ?', [publicUrl, userId]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile photo uploaded successfully!',
+      photoUrl: publicUrl,
     });
-
-    blobStream.on('error', (err) => {
-      console.error('Error uploading to GCS:', err);
-      res.status(500).json({ success: false, message: 'Failed to upload profile photo' });
-    });
-
-    blobStream.on('finish', async () => {
-      const publicUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
-
-      const sql = 'UPDATE users SET profile_photo = ? WHERE id = ?';
-      await pool.query(sql, [publicUrl, userId]);
-
-      res.status(200).json({
-        success: true,
-        message: 'Profile photo uploaded successfully!',
-        photoUrl: publicUrl,
-      });
-    });
-
-    blobStream.end(file.buffer);
   } catch (error) {
     console.error('Error in uploadProfilePhoto:', error);
     res.status(500).json({
@@ -276,30 +266,11 @@ const updatePhotoProfile = async (req, res) => {
     const file = req.file;
 
     if (!file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No file uploaded',
-      });
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
-    const fileName = `${Date.now()}-${file.originalname}`;
-    const blob = storage.bucket(bucketName).file(`${profileFolder}/${fileName}`);
-
-    const blobStream = blob.createWriteStream({
-      resumable: false,
-      contentType: file.mimetype,
-    });
-
-    await new Promise((resolve, reject) => {
-      blobStream.on('error', reject);
-      blobStream.on('finish', resolve);
-      blobStream.end(file.buffer);
-    });
-
-    const newImageUrl = `https://storage.googleapis.com/${bucketName}/${blob.name}`;
-
-    const updateSql = 'UPDATE users SET profile_photo = ? WHERE id = ?';
-    await pool.query(updateSql, [newImageUrl, user.id]);
+    const newImageUrl = await saveFileToDisk(req, file, profileFolder);
+    await pool.query('UPDATE users SET profile_photo = ? WHERE id = ?', [newImageUrl, user.id]);
 
     res.status(200).json({
       success: true,
@@ -373,24 +344,12 @@ const getUserProfile = async (req, res) => {
 const createPost = async (req, res) => {
   try {
     const { title, content } = req.body;
-    const { user } = req; 
+    const { user } = req;
     const file = req.file;
 
     let imageUrl = null;
     if (file) {
-      const blob = storage.bucket(bucketName).file(`${postFolder}/${Date.now()}-${file.originalname}`);
-      const blobStream = blob.createWriteStream({
-        resumable: false,
-        contentType: file.mimetype,
-      });
-
-      await new Promise((resolve, reject) => {
-        blobStream.on('error', reject);
-        blobStream.on('finish', resolve);
-        blobStream.end(file.buffer);
-      });
-
-      imageUrl = `https://storage.googleapis.com/${bucketName}/${blob.name}`;
+      imageUrl = await saveFileToDisk(req, file, postFolder);
     }
 
     const sql = 'INSERT INTO posts (user_id, title, content, image_url) VALUES (?, ?, ?, ?)';
@@ -428,19 +387,7 @@ const updatePost = async (req, res) => {
 
     let imageUrl = existingPost[0].image_url;
     if (file) {
-      const blob = storage.bucket(bucketName).file(`${postFolder}/${Date.now()}-${file.originalname}`);
-      const blobStream = blob.createWriteStream({
-        resumable: false,
-        contentType: file.mimetype,
-      });
-
-      await new Promise((resolve, reject) => {
-        blobStream.on('error', reject);
-        blobStream.on('finish', resolve);
-        blobStream.end(file.buffer);
-      });
-
-      imageUrl = `https://storage.googleapis.com/${bucketName}/${blob.name}`;
+      imageUrl = await saveFileToDisk(req, file, postFolder);
     }
 
     const updateSql = 'UPDATE posts SET title = ?, content = ?, image_url = ? WHERE id = ? AND user_id = ?';
@@ -650,17 +597,13 @@ const addComment = async (req, res) => {
 const getProfilePictureUrl = async (userId) => {
   try {
     const [result] = await pool.query('SELECT profile_photo FROM users WHERE id = ?', [userId]);
-
     if (result.length > 0 && result[0].profile_photo) {
-      const filePath = result[0].profile_photo;
-
-      return `${filePath}`;
-    } else {
-      return `https://storage.googleapis.com/${bucketName}/${profileFolder}/default-profile.jpg`;
+      return result[0].profile_photo;
     }
+    return '';
   } catch (error) {
     console.error('Error getting profile picture from database:', error);
-    return `https://storage.googleapis.com/${bucketName}/${profileFolder}/default-profile.jpg`;
+    return '';
   }
 };
 
@@ -1518,65 +1461,20 @@ const saveScanHistory = async (req, res) => {
     return res.status(400).json({ message: "Validasi terlalu panjang (maksimal 1000 karakter)." });
   }
 
-  const fishImage = req.file;
-  if (!fishImage || !fishImage.buffer) {
-    return res.status(400).json({ message: "File gambar tidak ditemukan atau tidak valid!" });
-  }
-
   try {
-    const bucket = storage.bucket(bucketName);
-    const fileName = `${scanHistoryFolder}/${Date.now()}_${fishImage.originalname}`;
-    const file = bucket.file(fileName);
+    const fishImageUrl = await saveFileToDisk(req, req.file, scanHistoryFolder);
+    const query = `
+      INSERT INTO scan_history (user_id, fish_image, disease, confidence, description, treatment, validation, scan_timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+    `;
+    await pool.query(query, [userId, fishImageUrl, disease, confidenceValue, description, treatment, validation || null]);
 
-    const blobStream = file.createWriteStream({
-      metadata: {
-        contentType: fishImage.mimetype,
-      },
+    res.status(201).json({
+      message: "Riwayat scan berhasil disimpan!",
+      data: { imageUrl: fishImageUrl, fishName: disease, accuracy: confidenceValue },
     });
-
-    blobStream.on("finish", async () => {
-      try {
-        const publicUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
-        const query = `
-          INSERT INTO scan_history (user_id, fish_image, disease, confidence, description, treatment, validation, scan_timestamp) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-        `;
-        await pool.query(query, [
-          userId,
-          publicUrl,
-          disease,
-          confidenceValue,
-          description,
-          treatment,
-          validation || null,
-        ]);
-
-        res.status(201).json({
-          message: "Scan history berhasil disimpan!",
-          data: {
-            userId,
-            fishImage: publicUrl,
-            disease,
-            confidence: confidenceValue,
-            description,
-            treatment,
-            validation: validation || null,
-          },
-        });
-      } catch (dbError) {
-        console.error("Error saat menyimpan ke database:", dbError.message);
-        res.status(500).json({ message: "Gagal menyimpan ke database." });
-      }
-    });
-
-    blobStream.on("error", (uploadError) => {
-      console.error("Error saat mengunggah file ke GCS:", uploadError.message);
-      res.status(500).json({ message: "Gagal mengunggah file ke GCS." });
-    });
-
-    blobStream.end(fishImage.buffer);
   } catch (error) {
-    console.error("Error umum saat menyimpan scan history:", error.message);
+    console.error('Error saat menyimpan scan history:', error.message);
     res.status(500).json({ message: "Terjadi kesalahan pada server." });
   }
 };
