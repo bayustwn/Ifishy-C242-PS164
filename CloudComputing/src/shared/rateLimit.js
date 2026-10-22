@@ -1,5 +1,6 @@
 const { RateLimiterRedis, RateLimiterMemory } = require('rate-limiter-flexible');
 const redis = require('./redis');
+const { fail } = require('./response');
 
 const createLimiter = (opts) =>
   redis
@@ -13,7 +14,7 @@ const predictLimiter = createLimiter({ keyPrefix: 'rl_predict', points: 30, dura
 const limit = (limiter, message) => (req, res, next) => {
   limiter.consume(req.ip)
     .then(() => next())
-    .catch(() => res.status(429).json({ success: false, message }));
+    .catch(() => fail(res, 429, 'TOO_MANY_REQUESTS', message));
 };
 
 const closeLimiter = async () => {

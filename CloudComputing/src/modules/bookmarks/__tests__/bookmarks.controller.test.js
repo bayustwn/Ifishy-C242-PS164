@@ -33,7 +33,7 @@ describe('addBookmark', () => {
   test('body tidak valid → 400 "Invalid input data", tanpa memanggil service', async () => {
     const res = await call(controller.addBookmark, { user: { id: 1 }, body: { type: 'asal' } });
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('Invalid input data');
+    expect(res.body.error.message).toBe('Invalid input data');
     expect(bookmarkService.addBookmark).not.toHaveBeenCalled();
   });
 
@@ -79,7 +79,7 @@ describe('getBookmarks', () => {
 
     expect(res.statusCode).toBe(200);
     expect(bookmarkService.getBookmarks).toHaveBeenCalledWith(1, {});
-    expect(res.body.bookmarks).toEqual([]);
+    expect(res.body.data).toEqual([]);
   });
 });
 
@@ -87,7 +87,7 @@ describe('getBookmarkById', () => {
   test('param id kosong → 400 "Bookmark ID is required", tanpa memanggil service', async () => {
     const res = await call(controller.getBookmarkById, { user: { id: 1 }, params: {} });
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('Bookmark ID is required');
+    expect(res.body.error.message).toBe('Bookmark ID is required');
     expect(bookmarkService.getBookmarkById).not.toHaveBeenCalled();
   });
 
@@ -108,6 +108,6 @@ describe('getBookmarkById', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.bookmark).toMatchObject({ id: 5, type: 'post', item_id: 11, title: 'BMUD post' });
+    expect(res.body.data).toMatchObject({ id: 5, type: 'post', item_id: 11, title: 'BMUD post' });
   });
 });

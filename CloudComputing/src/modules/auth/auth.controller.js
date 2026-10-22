@@ -1,47 +1,40 @@
 const guard = require('../../shared/guard');
 const firstIssueMessage = require('../../shared/validation');
+const { ok, fail } = require('../../shared/response');
 const authService = require('./auth.service');
 const { registerSchema, loginSchema } = require('./auth.schema');
 
 const registerUser = guard('Error in registerUser', 'Failed to create user', async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ success: false, message: firstIssueMessage(parsed) });
+    return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
   }
 
   const user = await authService.registerUser(parsed.data);
 
-  return res.status(201).json({
-    success: true,
-    message: 'User successfully registered!',
-    user,
-  });
+  return ok(res, user, 'User successfully registered!', 201);
 });
 
 const loginUser = guard('Error in loginUser', 'Failed to login', async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ success: false, message: 'Invalid input data' });
+    return fail(res, 400, 'VALIDATION_ERROR', 'Invalid input data');
   }
 
   const result = await authService.loginUser(parsed.data);
 
   if (result === 'not_found') {
-    return res.status(404).json({ success: false, message: 'User not found' });
+    return fail(res, 404, 'NOT_FOUND', 'User not found');
   }
   if (result === 'invalid') {
-    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    return fail(res, 401, 'INVALID_CREDENTIALS', 'Invalid credentials');
   }
 
-  return res.status(200).json({
-    success: true,
-    message: 'Login successful',
-    token: result.token,
-  });
+  return ok(res, { token: result.token }, 'Login successful');
 });
 
 const logoutUser = guard('Error in logoutUser', 'Failed to logout', async (req, res) => {
-  return res.status(200).json({ success: true, message: 'Logout successful' });
+  return ok(res, null, 'Logout successful');
 });
 
 module.exports = { registerUser, loginUser, logoutUser };

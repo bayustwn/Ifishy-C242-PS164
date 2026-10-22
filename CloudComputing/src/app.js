@@ -6,6 +6,7 @@ const compression = require('compression');
 const pinoHttp = require('pino-http');
 const routes = require('./routes');
 const logger = require('./shared/logger');
+const { ok } = require('./shared/response');
 const { limit, globalLimiter, predictLimiter } = require('./shared/rateLimit');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
@@ -35,16 +36,19 @@ app.get('/', (req, res) => {
 });
 
 app.post('/predict', limit(predictLimiter, 'Too many prediction requests, please try again later'), (req, res) => {
-  res.json({
-    disease: 'Aeromoniasis',
-    confidence: '92.5',
-    details: {
-      'Validasi': 'Belum tervalidasi - hasil prediksi awal dari model (stub dev)',
-      'Rekomendasi Pengobatan': 'Karantina ikan, perbaiki kualitas air, dan gunakan antibiotik sesuai dosis.',
-      'Penyebab': 'Infeksi bakteri Aeromonas hydrophila akibat kualitas air yang buruk.',
+  return ok(
+    res,
+    {
+      disease: 'Aeromoniasis',
+      confidence: '92.5',
+      details: {
+        'Validasi': 'Belum tervalidasi - hasil prediksi awal dari model (stub dev)',
+        'Rekomendasi Pengobatan': 'Karantina ikan, perbaiki kualitas air, dan gunakan antibiotik sesuai dosis.',
+        'Penyebab': 'Infeksi bakteri Aeromonas hydrophila akibat kualitas air yang buruk.',
+      },
     },
-    message: 'Stub prediction (dev) — model belum diintegrasi',
-  });
+    'Stub prediction (dev) — model belum diintegrasi'
+  );
 });
 
 app.use(notFound);

@@ -1,26 +1,27 @@
 const guard = require('../../shared/guard');
 const { parsePagination } = require('../../shared/pagination');
+const { ok, fail } = require('../../shared/response');
 const articlesService = require('./articles.service');
 const { scrapeParamsSchema } = require('./articles.schema');
 
 const getArticleById = guard('Error fetching article', 'Failed to fetch article', async (req, res) => {
   const article = await articlesService.getArticleById(req.params.id);
   if (!article) {
-    return res.status(404).json({ success: false, message: 'Article not found' });
+    return fail(res, 404, 'NOT_FOUND', 'Article not found');
   }
 
-  return res.status(200).json({ success: true, message: 'Article fetched successfully', data: article });
+  return ok(res, article, 'Article fetched successfully');
 });
 
 const getAllArticles = guard('Error fetching articles', 'Failed to fetch articles', async (req, res) => {
   const articles = await articlesService.getAllArticles(parsePagination(req.query));
-  return res.status(200).json({ success: true, message: 'Articles fetched successfully', data: articles });
+  return ok(res, articles, 'Articles fetched successfully');
 });
 
 const getArticleFromUrl = guard('Error scraping and saving article', 'Failed to scrape and save article', async (req, res) => {
   const parsed = scrapeParamsSchema.safeParse(req.params);
   if (!parsed.success || !parsed.data.url) {
-    return res.status(400).json({ success: false, message: 'URL parameter is required' });
+    return fail(res, 400, 'VALIDATION_ERROR', 'URL parameter is required');
   }
 
   let fullUrl = parsed.data.url;
@@ -30,14 +31,10 @@ const getArticleFromUrl = guard('Error scraping and saving article', 'Failed to 
 
   const result = await articlesService.fetchAndSaveFromUrl(fullUrl);
   if (result.message) {
-    return res.status(500).json({ success: false, message: result.message });
+    return fail(res, 500, 'SCRAPE_FAILED', result.message);
   }
 
-  return res.status(200).json({
-    success: true,
-    message: 'Article scraped and saved successfully',
-    articleId: result.articleId,
-  });
+  return ok(res, { articleId: result.articleId }, 'Article scraped and saved successfully');
 });
 
 module.exports = { getArticleById, getAllArticles, getArticleFromUrl };

@@ -32,7 +32,7 @@ describe('registerUser', () => {
   test('field kosong → 400 pesan required', async () => {
     const res = await call(controller.registerUser, { body: { username: 'b', password: 'p', confirmPassword: 'p' } });
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('Username, email, password, and confirm password are required.');
+    expect(res.body.error.message).toBe('Username, email, password, and confirm password are required.');
     expect(authService.registerUser).not.toHaveBeenCalled();
   });
 
@@ -41,7 +41,7 @@ describe('registerUser', () => {
       body: { username: 'b', email: 'x@t.loc', password: 'p', confirmPassword: 'beda' },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('Passwords do not match');
+    expect(res.body.error.message).toBe('Passwords do not match');
   });
 
   test('sukses → 201 {user}', async () => {
@@ -53,7 +53,7 @@ describe('registerUser', () => {
 
     expect(res.statusCode).toBe(201);
     expect(res.body.message).toBe('User successfully registered!');
-    expect(res.body.user).toEqual({ id: 9, username: 'b', email: 'x@t.loc' });
+    expect(res.body.data).toEqual({ id: 9, username: 'b', email: 'x@t.loc' });
   });
 
   test('db error (mis. email duplikat) → 500 "Failed to create user"', async () => {
@@ -64,7 +64,7 @@ describe('registerUser', () => {
     });
 
     expect(res.statusCode).toBe(500);
-    expect(res.body.message).toBe('Failed to create user');
+    expect(res.body.error.message).toBe('Failed to create user');
   });
 });
 
@@ -73,21 +73,21 @@ describe('loginUser', () => {
     authService.loginUser.mockResolvedValue('not_found');
     const res = await call(controller.loginUser, { body: { email: 'x@t.loc', password: 'p' } });
     expect(res.statusCode).toBe(404);
-    expect(res.body.message).toBe('User not found');
+    expect(res.body.error.message).toBe('User not found');
   });
 
   test('service "invalid" → 401', async () => {
     authService.loginUser.mockResolvedValue('invalid');
     const res = await call(controller.loginUser, { body: { email: 'x@t.loc', password: 'salah' } });
     expect(res.statusCode).toBe(401);
-    expect(res.body.message).toBe('Invalid credentials');
+    expect(res.body.error.message).toBe('Invalid credentials');
   });
 
   test('sukses → 200 dengan token', async () => {
     authService.loginUser.mockResolvedValue({ token: 'jwt-token' });
     const res = await call(controller.loginUser, { body: { email: 'x@t.loc', password: 'benar' } });
     expect(res.statusCode).toBe(200);
-    expect(res.body.token).toBe('jwt-token');
+    expect(res.body.data.token).toBe('jwt-token');
     expect(res.body.message).toBe('Login successful');
   });
 
@@ -95,7 +95,7 @@ describe('loginUser', () => {
     authService.loginUser.mockRejectedValue(new Error('JWT_SECRET is missing'));
     const res = await call(controller.loginUser, { body: { email: 'x@t.loc', password: 'p' } });
     expect(res.statusCode).toBe(500);
-    expect(res.body.message).toBe('Failed to login');
+    expect(res.body.error.message).toBe('Failed to login');
   });
 });
 

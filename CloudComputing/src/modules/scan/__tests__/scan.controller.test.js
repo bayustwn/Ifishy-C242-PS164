@@ -36,7 +36,7 @@ describe('saveScanHistory', () => {
   test('file tidak ada → 400 "Semua data harus diisi!"', async () => {
     const res = await call(controller.saveScanHistory, { body: goodBody });
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('Semua data harus diisi!');
+    expect(res.body.error.message).toBe('Semua data harus diisi!');
     expect(scanService.saveScanHistory).not.toHaveBeenCalled();
   });
 
@@ -46,7 +46,7 @@ describe('saveScanHistory', () => {
       body: { ...goodBody, confidence: 'abc' },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('Confidence harus berupa angka desimal!');
+    expect(res.body.error.message).toBe('Confidence harus berupa angka desimal!');
   });
 
   test('deskripsi >1000 → 400 pesan deskripsi (prioritas di bawah confidence)', async () => {
@@ -55,7 +55,7 @@ describe('saveScanHistory', () => {
       body: { ...goodBody, description: 'x'.repeat(1001) },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('Deskripsi terlalu panjang (maksimal 1000 karakter).');
+    expect(res.body.error.message).toBe('Deskripsi terlalu panjang (maksimal 1000 karakter).');
   });
 
   test('valid → walik service → 201 dengan payload image', async () => {
@@ -80,7 +80,7 @@ describe('getScanHistoryById', () => {
   test('userId kosong → 400 "User ID diperlukan!"', async () => {
     const res = await call(controller.getScanHistoryById, { params: {} });
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('User ID diperlukan!');
+    expect(res.body.error.message).toBe('User ID diperlukan!');
     expect(scanService.getScanHistoriesByUserId).not.toHaveBeenCalled();
   });
 
@@ -90,7 +90,7 @@ describe('getScanHistoryById', () => {
     const res = await call(controller.getScanHistoryById, { params: { userId: '999' } });
 
     expect(res.statusCode).toBe(404);
-    expect(res.body.message).toBe('Scan history tidak ditemukan untuk user ini.');
+    expect(res.body.error.message).toBe('Scan history tidak ditemukan untuk user ini.');
   });
 
   test('ada riwayat → 200 dengan data camelCase', async () => {

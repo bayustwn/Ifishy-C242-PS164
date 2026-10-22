@@ -1,4 +1,5 @@
 const logger = require('./logger');
+const { fail } = require('./response');
 
 const guard = (label, message, handler) =>
   async (req, res) => {
@@ -6,7 +7,7 @@ const guard = (label, message, handler) =>
       await handler(req, res);
     } catch (error) {
       logger.error({ err: error }, label);
-      res.status(500).json({ success: false, message });
+      fail(res, 500, 'INTERNAL_ERROR', message);
     }
   };
 

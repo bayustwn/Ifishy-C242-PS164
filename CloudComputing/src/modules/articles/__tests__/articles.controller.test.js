@@ -35,7 +35,7 @@ describe('getArticleById', () => {
     const res = await call(controller.getArticleById, { params: { id: '999' } });
 
     expect(res.statusCode).toBe(404);
-    expect(res.body.message).toBe('Article not found');
+    expect(res.body.error.message).toBe('Article not found');
   });
 
   test('ditemukan → 200 data snake_case', async () => {
@@ -65,7 +65,7 @@ describe('getArticleFromUrl', () => {
   test('url kosong → 400 "URL parameter is required"', async () => {
     const res = await call(controller.getArticleFromUrl, { params: {} });
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('URL parameter is required');
+    expect(res.body.error.message).toBe('URL parameter is required');
     expect(articlesService.fetchAndSaveFromUrl).not.toHaveBeenCalled();
   });
 
@@ -83,7 +83,7 @@ describe('getArticleFromUrl', () => {
     const res = await call(controller.getArticleFromUrl, { params: { url: 'https://contoh.com/a' } });
 
     expect(res.statusCode).toBe(500);
-    expect(res.body.message).toBe('Failed to scrape article');
+    expect(res.body.error.message).toBe('Failed to scrape article');
   });
 
   test('scrape ok → 200 articleId', async () => {
@@ -92,7 +92,7 @@ describe('getArticleFromUrl', () => {
     const res = await call(controller.getArticleFromUrl, { params: { url: 'https://contoh.com/a' } });
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.articleId).toBe(9);
+    expect(res.body.data.articleId).toBe(9);
     expect(res.body.message).toBe('Article scraped and saved successfully');
   });
 
@@ -102,6 +102,6 @@ describe('getArticleFromUrl', () => {
     const res = await call(controller.getArticleFromUrl, { params: { url: 'https://contoh.com/a' } });
 
     expect(res.statusCode).toBe(500);
-    expect(res.body.message).toBe('Failed to scrape and save article');
+    expect(res.body.error.message).toBe('Failed to scrape and save article');
   });
 });

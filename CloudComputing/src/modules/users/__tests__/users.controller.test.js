@@ -56,14 +56,14 @@ describe('updateUser', () => {
   test('token tidak ada → 401 "Token is required"', async () => {
     const res = await call(controller.updateUser, { headers: {}, body: {} });
     expect(res.statusCode).toBe(401);
-    expect(res.body.message).toBe('Token is required');
+    expect(res.body.error.message).toBe('Token is required');
     expect(usersService.updateUser).not.toHaveBeenCalled();
   });
 
   test('token invalid → 500 (perilaku lama: verify throw masuk catch)', async () => {
     const res = await call(controller.updateUser, { headers: { authorization: 'Bearer hacker' }, body: {} });
     expect(res.statusCode).toBe(500);
-    expect(res.body.message).toBe('Failed to update user profile');
+    expect(res.body.error.message).toBe('Failed to update user profile');
   });
 
   test('sukses → 200 "User profile updated successfully"', async () => {
@@ -89,7 +89,7 @@ describe('updateUser', () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('Incorrect password');
+    expect(res.body.error.message).toBe('Incorrect password');
   });
 });
 
@@ -113,7 +113,7 @@ describe('uploadProfilePhoto', () => {
   test('file tidak ada → 400 "No file uploaded"', async () => {
     const res = await call(controller.uploadProfilePhoto, { body: { userId: '1' } });
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe('No file uploaded');
+    expect(res.body.error.message).toBe('No file uploaded');
   });
 
   test('file + userId → 200 photoUrl', async () => {
@@ -129,7 +129,7 @@ describe('uploadProfilePhoto', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.photoUrl).toBe('http://h/uploads/photo-profile-user/p.jpg');
+    expect(res.body.data.photoUrl).toBe('http://h/uploads/photo-profile-user/p.jpg');
     expect(usersService.setProfilePhotoByUserId).toHaveBeenCalledWith(7, 'http://h/uploads/photo-profile-user/p.jpg');
   });
 });
@@ -141,7 +141,7 @@ describe('getDashboardData / getUserProfile', () => {
     const res = await call(controller.getDashboardData, { params: { email: 'zz@t.loc' } });
 
     expect(res.statusCode).toBe(404);
-    expect(res.body.message).toBe('User not found');
+    expect(res.body.error.message).toBe('User not found');
   });
 
   test('ditemukan → 200 shape snake_case', async () => {
@@ -150,6 +150,6 @@ describe('getDashboardData / getUserProfile', () => {
     const res = await call(controller.getUserProfile, { params: { email: 'a@t.loc' } });
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.profile).toEqual({ id: 5, username: 'a', email: 'a@t.loc', profile_photo: 'p.jpg' });
+    expect(res.body.data).toEqual({ id: 5, username: 'a', email: 'a@t.loc', profile_photo: 'p.jpg' });
   });
 });

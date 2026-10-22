@@ -41,7 +41,7 @@ describe('authenticateToken', () => {
   test('token hilang / format salah → 401', async () => {
     const { res, next } = await run(undefined);
     expect(res.statusCode).toBe(401);
-    expect(res.body.message).toBe('Access denied, token missing or invalid');
+    expect(res.body.error.message).toBe('Access denied, token missing or invalid');
     expect(next).not.toHaveBeenCalled();
 
     const r2 = await run('Basic abc');
@@ -59,7 +59,7 @@ describe('authenticateToken', () => {
     const token = await sign(true);
     const { res, next } = await run(`Bearer ${token}`);
     expect(res.statusCode).toBe(401);
-    expect(res.body.message).toBe('Token expired, please login again');
+    expect(res.body.error.message).toBe('Token expired, please login again');
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -67,6 +67,6 @@ describe('authenticateToken', () => {
     const token = await sign(false);
     const { res } = await run(`Bearer ${token.slice(0, -2)}xx`);
     expect(res.statusCode).toBe(401);
-    expect(res.body.message).toBe('Invalid token, please login again');
+    expect(res.body.error.message).toBe('Invalid token, please login again');
   });
 });

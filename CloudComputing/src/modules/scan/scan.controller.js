@@ -1,18 +1,19 @@
 const guard = require('../../shared/guard');
 const firstIssueMessage = require('../../shared/validation');
 const { parsePagination } = require('../../shared/pagination');
+const { ok, fail } = require('../../shared/response');
 const scanService = require('./scan.service');
 const { saveScanSchema, scanUserIdSchema } = require('./scan.schema');
 const { saveFileToDisk, scanHistoryFolder } = require('../../shared/storage');
 
 const saveScanHistory = guard('Error saat menyimpan scan history', 'Terjadi kesalahan pada server.', async (req, res) => {
   if (!req.file) {
-    return res.status(400).json({ success: false, message: 'Semua data harus diisi!' });
+    return fail(res, 400, 'VALIDATION_ERROR', 'Semua data harus diisi!');
   }
 
   const parsed = saveScanSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ success: false, message: firstIssueMessage(parsed) });
+    return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
   }
 
   const fishImageUrl = await saveFileToDisk(req, req.file, scanHistoryFolder);
@@ -25,17 +26,13 @@ const saveScanHistory = guard('Error saat menyimpan scan history', 'Terjadi kesa
     validation: parsed.data.validation,
   });
 
-  return res.status(201).json({
-    success: true,
-    message: 'Riwayat scan berhasil disimpan!',
-    data,
-  });
+  return ok(res, data, 'Riwayat scan berhasil disimpan!', 201);
 });
 
 const getScanHistoryById = guard('Error saat mengambil scan history', 'Gagal mengambil scan history.', async (req, res) => {
   const parsed = scanUserIdSchema.safeParse(req.params);
   if (!parsed.success) {
-    return res.status(400).json({ success: false, message: 'User ID diperlukan!' });
+    return fail(res, 400, 'VALIDATION_ERROR', 'User ID diperlukan!');
   }
 
   const histories = await scanService.getScanHistoriesByUserId(
@@ -43,14 +40,10 @@ const getScanHistoryById = guard('Error saat mengambil scan history', 'Gagal men
     parsePagination(req.query),
   );
   if (histories.length === 0) {
-    return res.status(404).json({ success: false, message: 'Scan history tidak ditemukan untuk user ini.' });
+    return fail(res, 404, 'NOT_FOUND', 'Scan history tidak ditemukan untuk user ini.');
   }
 
-  return res.status(200).json({
-    success: true,
-    message: 'Scan history berhasil diambil!',
-    data: histories,
-  });
+  return ok(res, histories, 'Scan history berhasil diambil!');
 });
 
 module.exports = { saveScanHistory, getScanHistoryById };
