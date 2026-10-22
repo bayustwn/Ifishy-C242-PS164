@@ -26,3 +26,4 @@ dist/
 build/
 *.bak
 *.tmp
+uploads/

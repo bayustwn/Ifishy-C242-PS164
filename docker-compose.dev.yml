@@ -37,6 +37,12 @@ services:
       DATABASE_URL: mysql://ifishy_dev:ifishy_pass@db:3306/ifishy
     volumes:
       - uploads:/usr/src/app/uploads
+      - ./CloudComputing/src:/usr/src/app/src
+      - ./CloudComputing/prisma:/usr/src/app/prisma
+      - ./CloudComputing/scripts:/usr/src/app/scripts
+      - ./CloudComputing/package.json:/usr/src/app/package.json
+      - ./CloudComputing/package-lock.json:/usr/src/app/package-lock.json
+      - ./CloudComputing/jest.config.js:/usr/src/app/jest.config.js
     depends_on:
       db:
         condition: service_healthy
