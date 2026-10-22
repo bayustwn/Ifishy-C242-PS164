@@ -1,460 +1,323 @@
+const guard = require('../../shared/guard');
+const firstIssueMessage = require('../../shared/validation');
 const community = require('./community.service');
 const { saveFileToDisk, postFolder } = require('../../shared/storage');
 const { postBodySchema, addCommentSchema, addReplySchema } = require('./community.schema');
 
 const isNumericId = (value) => /^\d+$/.test(String(value));
-const firstMessage = (parsed) => parsed.error.issues[0].message;
 
-const createPost = async (req, res) => {
-  try {
-    const { title, content } = postBodySchema.parse(req.body);
-    const file = req.file;
+const createPost = guard('Error in createPost', 'Failed to create post', async (req, res) => {
+  const { title, content } = postBodySchema.parse(req.body);
+  const file = req.file;
 
-    let imageUrl = null;
-    if (file) {
-      imageUrl = await saveFileToDisk(req, file, postFolder);
-    }
+  let imageUrl = null;
+  if (file) {
+    imageUrl = await saveFileToDisk(req, file, postFolder);
+  }
 
-    const postId = await community.createPost(req.user.id, { title, content }, imageUrl);
+  const postId = await community.createPost(req.user.id, { title, content }, imageUrl);
 
-    res.status(201).json({
-      success: true,
-      message: 'Post created successfully!',
-      postId,
-    });
-  } catch (error) {
-    console.error('Error in createPost:', error);
-    res.status(500).json({
+  res.status(201).json({
+    success: true,
+    message: 'Post created successfully!',
+    postId,
+  });
+});
+
+const updatePost = guard('Error in updatePost', 'Failed to update post', async (req, res) => {
+  const { postId } = req.params;
+  const { user } = req;
+  const file = req.file;
+
+  if (!isNumericId(postId)) {
+    return res.status(404).json({
       success: false,
-      message: 'Failed to create post',
+      message: 'Post not found or you do not have permission to edit this post',
     });
   }
-};
 
-const updatePost = async (req, res) => {
-  try {
-    const { postId } = req.params;
-    const { user } = req;
-    const file = req.file;
+  const existingPost = await community.findPostByIdAndUser(Number(postId), user.id);
 
-    if (!isNumericId(postId)) {
-      return res.status(404).json({
-        success: false,
-        message: 'Post not found or you do not have permission to edit this post',
-      });
-    }
-
-    const existingPost = await community.findPostByIdAndUser(Number(postId), user.id);
-
-    if (!existingPost) {
-      return res.status(404).json({
-        success: false,
-        message: 'Post not found or you do not have permission to edit this post',
-      });
-    }
-
-    const { title, content } = postBodySchema.parse(req.body);
-
-    let imageUrl = existingPost.imageUrl;
-    if (file) {
-      imageUrl = await saveFileToDisk(req, file, postFolder);
-    }
-
-    await community.updatePost(Number(postId), user.id, { title, content }, imageUrl);
-
-    res.status(200).json({
-      success: true,
-      message: 'Post updated successfully!',
-    });
-  } catch (error) {
-    console.error('Error in updatePost:', error);
-    res.status(500).json({
+  if (!existingPost) {
+    return res.status(404).json({
       success: false,
-      message: 'Failed to update post',
+      message: 'Post not found or you do not have permission to edit this post',
     });
   }
-};
 
-const getPosts = async (req, res) => {
-  try {
-    const userId = req.user.id;
+  const { title, content } = postBodySchema.parse(req.body);
 
-    const posts = await community.getPosts(userId);
-
-    res.status(200).json({
-      success: true,
-      posts,
-    });
-  } catch (error) {
-    console.error('Error in getPosts:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve posts',
-    });
+  let imageUrl = existingPost.imageUrl;
+  if (file) {
+    imageUrl = await saveFileToDisk(req, file, postFolder);
   }
-};
 
-const getPostById = async (req, res) => {
+  await community.updatePost(Number(postId), user.id, { title, content }, imageUrl);
+
+  res.status(200).json({
+    success: true,
+    message: 'Post updated successfully!',
+  });
+});
+
+const getPosts = guard('Error in getPosts', 'Failed to retrieve posts', async (req, res) => {
+  const userId = req.user.id;
+
+  const posts = await community.getPosts(userId);
+
+  res.status(200).json({
+    success: true,
+    posts,
+  });
+});
+
+const getPostById = guard('Error in getPostById', 'Failed to retrieve the post', async (req, res) => {
   const { id } = req.params;
 
-  try {
-    if (!isNumericId(id)) {
-      return res.status(404).json({
-        success: false,
-        message: 'Post not found',
-      });
-    }
-
-    const post = await community.getPostById(Number(id));
-
-    if (!post) {
-      return res.status(404).json({
-        success: false,
-        message: 'Post not found',
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      post,
-    });
-  } catch (error) {
-    console.error('Error in getPostById:', error);
-    res.status(500).json({
+  if (!isNumericId(id)) {
+    return res.status(404).json({
       success: false,
-      message: 'Failed to retrieve the post',
+      message: 'Post not found',
     });
   }
-};
 
-const addShareToPost = async (req, res) => {
-  try {
-    const { postId } = req.params;
-    const userId = req.user.id;
+  const post = await community.getPostById(Number(id));
 
-    const result = await community.addShareToPost(Number(postId), userId);
-
-    if (result === 'already_shared') {
-      return res.status(400).json({
-        success: false,
-        message: 'You have already shared this post',
-      });
-    }
-
-    res.status(201).json({
-      success: true,
-      message: 'Post successfully shared!',
-    });
-  } catch (error) {
-    console.error('Error adding share to post:', error);
-    res.status(500).json({
+  if (!post) {
+    return res.status(404).json({
       success: false,
-      message: 'Failed to share post',
+      message: 'Post not found',
     });
   }
-};
 
-const addComment = async (req, res) => {
-  try {
-    const { content } = req.body;
-    const { postId } = req.params;
+  res.status(200).json({
+    success: true,
+    post,
+  });
+});
 
-    if (!postId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Post ID is required',
-      });
-    }
+const addShareToPost = guard('Error adding share to post', 'Failed to share post', async (req, res) => {
+  const { postId } = req.params;
+  const userId = req.user.id;
 
-    const parsed = addCommentSchema.safeParse({ content });
-    if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: firstMessage(parsed),
-      });
-    }
+  const result = await community.addShareToPost(Number(postId), userId);
 
-    await community.addComment(Number(postId), req.user.id, parsed.data.content);
-
-    res.status(201).json({
-      success: true,
-      message: 'Comment added successfully!',
-    });
-  } catch (error) {
-    console.error('Error in addComment:', error);
-    res.status(500).json({
+  if (result === 'already_shared') {
+    return res.status(400).json({
       success: false,
-      message: 'Failed to add comment',
+      message: 'You have already shared this post',
     });
   }
-};
 
-const getComments = async (req, res) => {
-  try {
-    const rawPostId = req.params.postId;
-    const postId = isNumericId(rawPostId) ? Number(rawPostId) : -1;
-    const userId = req.user.id;
+  res.status(201).json({
+    success: true,
+    message: 'Post successfully shared!',
+  });
+});
 
-    const comments = await community.getComments(postId, userId);
+const addComment = guard('Error in addComment', 'Failed to add comment', async (req, res) => {
+  const { content } = req.body;
+  const { postId } = req.params;
 
-    res.status(200).json({
-      success: true,
-      comments,
-    });
-  } catch (error) {
-    console.error('Error in getComments:', error);
-    res.status(500).json({
+  if (!postId) {
+    return res.status(400).json({
       success: false,
-      message: 'Failed to retrieve comments',
+      message: 'Post ID is required',
     });
   }
-};
 
-const getCommentsById = async (req, res) => {
-  try {
-    const { commentId } = req.params;
-    if (!isNumericId(commentId)) {
-      return res.status(404).json({
-        success: false,
-        message: 'Comment not found',
-      });
-    }
-
-    const userId = req.user.id;
-    const comment = await community.getCommentsById(Number(commentId), userId);
-
-    if (!comment) {
-      return res.status(404).json({
-        success: false,
-        message: 'Comment not found',
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      comment,
-    });
-  } catch (error) {
-    console.error('Error in getCommentsById:', error);
-    res.status(500).json({
+  const parsed = addCommentSchema.safeParse({ content });
+  if (!parsed.success) {
+    return res.status(400).json({
       success: false,
-      message: 'Failed to retrieve comment',
+      message: firstIssueMessage(parsed),
     });
   }
-};
 
-const addReplyToComment = async (req, res) => {
-  try {
-    const parsed = addReplySchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: firstMessage(parsed),
-      });
-    }
+  await community.addComment(Number(postId), req.user.id, parsed.data.content);
 
-    await community.addReplyToComment(Number(req.params.commentId), req.user.id, parsed.data.content);
+  res.status(201).json({
+    success: true,
+    message: 'Comment added successfully!',
+  });
+});
 
-    res.status(201).json({
-      success: true,
-      message: 'Reply added successfully',
-    });
-  } catch (error) {
-    console.error('Error adding reply to comment:', error);
-    res.status(500).json({
+const getComments = guard('Error in getComments', 'Failed to retrieve comments', async (req, res) => {
+  const rawPostId = req.params.postId;
+  const postId = isNumericId(rawPostId) ? Number(rawPostId) : -1;
+  const userId = req.user.id;
+
+  const comments = await community.getComments(postId, userId);
+
+  res.status(200).json({
+    success: true,
+    comments,
+  });
+});
+
+const getCommentsById = guard('Error in getCommentsById', 'Failed to retrieve comment', async (req, res) => {
+  const { commentId } = req.params;
+  if (!isNumericId(commentId)) {
+    return res.status(404).json({
       success: false,
-      message: 'Failed to add reply to comment',
+      message: 'Comment not found',
     });
   }
-};
 
-const getCommentsWithReplies = async (req, res) => {
-  try {
-    const rawPostId = req.params.postId;
-    const postId = isNumericId(rawPostId) ? Number(rawPostId) : -1;
+  const userId = req.user.id;
+  const comment = await community.getCommentsById(Number(commentId), userId);
 
-    const comments = await community.getCommentsWithReplies(postId);
-
-    res.status(200).json({
-      success: true,
-      comments,
-    });
-  } catch (error) {
-    console.error('Error in getCommentsWithReplies:', error);
-    res.status(500).json({
+  if (!comment) {
+    return res.status(404).json({
       success: false,
-      message: 'Failed to retrieve comments and replies',
+      message: 'Comment not found',
     });
   }
-};
 
-const addLikeToComment = async (req, res) => {
-  try {
-    const result = await community.addLikeToComment(Number(req.params.commentId), req.user.id);
+  res.status(200).json({
+    success: true,
+    comment,
+  });
+});
 
-    if (result === 'already_liked') {
-      return res.status(400).json({
-        success: false,
-        message: 'You have already liked this comment',
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Like added to comment successfully',
-    });
-  } catch (error) {
-    console.error('Error adding like to comment:', error);
-    res.status(500).json({
+const addReplyToComment = guard('Error adding reply to comment', 'Failed to add reply to comment', async (req, res) => {
+  const parsed = addReplySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
       success: false,
-      message: 'Failed to add like to comment',
+      message: firstIssueMessage(parsed),
     });
   }
-};
 
-const removeLikeFromComment = async (req, res) => {
-  try {
-    const result = await community.removeLikeFromComment(Number(req.params.commentId), req.user.id);
+  await community.addReplyToComment(Number(req.params.commentId), req.user.id, parsed.data.content);
 
-    if (result === 'not_liked') {
-      return res.status(400).json({
-        success: false,
-        message: 'You have not liked this comment yet',
-      });
-    }
+  res.status(201).json({
+    success: true,
+    message: 'Reply added successfully',
+  });
+});
 
-    res.status(200).json({
-      success: true,
-      message: 'Like removed from comment successfully',
-    });
-  } catch (error) {
-    console.error('Error removing like from comment:', error);
-    res.status(500).json({
+const getCommentsWithReplies = guard('Error in getCommentsWithReplies', 'Failed to retrieve comments and replies', async (req, res) => {
+  const rawPostId = req.params.postId;
+  const postId = isNumericId(rawPostId) ? Number(rawPostId) : -1;
+
+  const comments = await community.getCommentsWithReplies(postId);
+
+  res.status(200).json({
+    success: true,
+    comments,
+  });
+});
+
+const addLikeToComment = guard('Error adding like to comment', 'Failed to add like to comment', async (req, res) => {
+  const result = await community.addLikeToComment(Number(req.params.commentId), req.user.id);
+
+  if (result === 'already_liked') {
+    return res.status(400).json({
       success: false,
-      message: 'Failed to remove like from comment',
+      message: 'You have already liked this comment',
     });
   }
-};
 
-const getLikedCommentsByUser = async (req, res) => {
-  try {
-    const likedComments = await community.getLikedCommentsByUser(req.user.id);
+  res.status(200).json({
+    success: true,
+    message: 'Like added to comment successfully',
+  });
+});
 
-    res.status(200).json({
-      success: true,
-      likedComments,
-    });
-  } catch (error) {
-    console.error('Error in getLikedCommentsByUser:', error);
-    res.status(500).json({
+const removeLikeFromComment = guard('Error removing like from comment', 'Failed to remove like from comment', async (req, res) => {
+  const result = await community.removeLikeFromComment(Number(req.params.commentId), req.user.id);
+
+  if (result === 'not_liked') {
+    return res.status(400).json({
       success: false,
-      message: 'Failed to retrieve liked comments',
+      message: 'You have not liked this comment yet',
     });
   }
-};
 
-const addUpvoteToPost = async (req, res) => {
-  try {
-    const result = await community.addUpvoteToPost(Number(req.params.postId), req.user.id);
+  res.status(200).json({
+    success: true,
+    message: 'Like removed from comment successfully',
+  });
+});
 
-    if (result === 'already_upvoted') {
-      return res.status(400).json({ success: false, message: 'You have already upvoted this post' });
-    }
+const getLikedCommentsByUser = guard('Error in getLikedCommentsByUser', 'Failed to retrieve liked comments', async (req, res) => {
+  const likedComments = await community.getLikedCommentsByUser(req.user.id);
 
-    res.status(200).json({ success: true, message: 'Upvote added successfully' });
-  } catch (error) {
-    console.error('Error adding upvote:', error);
-    res.status(500).json({ success: false, message: 'Failed to add upvote' });
+  res.status(200).json({
+    success: true,
+    likedComments,
+  });
+});
+
+const addUpvoteToPost = guard('Error adding upvote', 'Failed to add upvote', async (req, res) => {
+  const result = await community.addUpvoteToPost(Number(req.params.postId), req.user.id);
+
+  if (result === 'already_upvoted') {
+    return res.status(400).json({ success: false, message: 'You have already upvoted this post' });
   }
-};
 
-const addDownvoteToPost = async (req, res) => {
-  try {
-    const result = await community.addDownvoteToPost(Number(req.params.postId), req.user.id);
+  res.status(200).json({ success: true, message: 'Upvote added successfully' });
+});
 
-    if (result === 'already_downvoted') {
-      return res.status(400).json({ success: false, message: 'You have already downvoted this post' });
-    }
+const addDownvoteToPost = guard('Error adding downvote', 'Failed to add downvote', async (req, res) => {
+  const result = await community.addDownvoteToPost(Number(req.params.postId), req.user.id);
 
-    res.status(200).json({ success: true, message: 'Downvote added successfully' });
-  } catch (error) {
-    console.error('Error adding downvote:', error);
-    res.status(500).json({ success: false, message: 'Failed to add downvote' });
+  if (result === 'already_downvoted') {
+    return res.status(400).json({ success: false, message: 'You have already downvoted this post' });
   }
-};
 
-const getVoteStatusById = async (req, res) => {
-  try {
-    const status = await community.getVoteStatusById(Number(req.params.postId), req.user.id);
+  res.status(200).json({ success: true, message: 'Downvote added successfully' });
+});
 
-    if (status === 'no vote') {
-      return res.status(200).json({
-        success: true,
-        message: 'User has not voted yet',
-        vote_status: 'no vote',
-      });
-    }
+const getVoteStatusById = guard('Error retrieving vote status', 'Failed to retrieve vote status', async (req, res) => {
+  const status = await community.getVoteStatusById(Number(req.params.postId), req.user.id);
 
-    res.status(200).json({
+  if (status === 'no vote') {
+    return res.status(200).json({
       success: true,
-      message: 'Vote status retrieved successfully',
-      vote_status: status,
-    });
-  } catch (error) {
-    console.error('Error retrieving vote status:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve vote status',
+      message: 'User has not voted yet',
+      vote_status: 'no vote',
     });
   }
-};
 
-const removeUpvoteFromPost = async (req, res) => {
-  try {
-    const result = await community.removeUpvoteFromPost(Number(req.params.postId), req.user.id);
+  res.status(200).json({
+    success: true,
+    message: 'Vote status retrieved successfully',
+    vote_status: status,
+  });
+});
 
-    if (result === 'not_upvote') {
-      return res.status(400).json({
-        success: false,
-        message: 'You have not upvoted this post yet',
-      });
-    }
+const removeUpvoteFromPost = guard('Error removing upvote', 'Failed to remove upvote', async (req, res) => {
+  const result = await community.removeUpvoteFromPost(Number(req.params.postId), req.user.id);
 
-    res.status(200).json({
-      success: true,
-      message: 'Upvote removed from post successfully',
-    });
-  } catch (error) {
-    console.error('Error removing upvote:', error);
-    res.status(500).json({
+  if (result === 'not_upvote') {
+    return res.status(400).json({
       success: false,
-      message: 'Failed to remove upvote',
+      message: 'You have not upvoted this post yet',
     });
   }
-};
 
-const removeDownvoteFromPost = async (req, res) => {
-  try {
-    const result = await community.removeDownvoteFromPost(Number(req.params.postId), req.user.id);
+  res.status(200).json({
+    success: true,
+    message: 'Upvote removed from post successfully',
+  });
+});
 
-    if (result === 'not_downvote') {
-      return res.status(400).json({
-        success: false,
-        message: 'You have not downvoted this post yet',
-      });
-    }
+const removeDownvoteFromPost = guard('Error removing downvote', 'Failed to remove downvote', async (req, res) => {
+  const result = await community.removeDownvoteFromPost(Number(req.params.postId), req.user.id);
 
-    res.status(200).json({
-      success: true,
-      message: 'Downvote removed from post successfully',
-    });
-  } catch (error) {
-    console.error('Error removing downvote:', error);
-    res.status(500).json({
+  if (result === 'not_downvote') {
+    return res.status(400).json({
       success: false,
-      message: 'Failed to remove downvote',
+      message: 'You have not downvoted this post yet',
     });
   }
-};
+
+  res.status(200).json({
+    success: true,
+    message: 'Downvote removed from post successfully',
+  });
+});
 
 module.exports = { createPost, updatePost, getPosts, getPostById, addShareToPost, addComment, getComments, getCommentsById, addReplyToComment, getCommentsWithReplies, addLikeToComment, removeLikeFromComment, getLikedCommentsByUser, addUpvoteToPost, addDownvoteToPost, getVoteStatusById, removeUpvoteFromPost, removeDownvoteFromPost };

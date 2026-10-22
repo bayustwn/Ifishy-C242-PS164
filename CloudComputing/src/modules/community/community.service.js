@@ -5,13 +5,19 @@ const minutesAgo = (createdAt) => {
   return `${isNaN(minutes) ? 0 : minutes} minutes ago`;
 };
 
-const profilePictureUrl = async (userId) => {
+const profilePictures = async (userIds) => {
+  const uniqueIds = [...new Set(userIds)];
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { profilePhoto: true } });
-    return user?.profilePhoto || '';
+    const rows = await prisma.user.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, profilePhoto: true },
+    });
+    const pictureMap = new Map();
+    for (const row of rows) pictureMap.set(row.id, row.profilePhoto || '');
+    return pictureMap;
   } catch (error) {
-    console.error('Error getting profile picture from database:', error);
-    return '';
+    console.error('Error getting profile pictures from database:', error);
+    return new Map();
   }
 };
 
@@ -31,6 +37,16 @@ const updatePost = async (postId, userId, { title, content }, imageUrl) => {
     data: { title: title ?? null, content: content ?? null, imageUrl },
   });
   return 'ok';
+};
+
+const POST_SELECT = {
+  id: true,
+  title: true,
+  content: true,
+  imageUrl: true,
+  createdAt: true,
+  userId: true,
+  user: { select: { username: true } },
 };
 
 const toPostCore = (p) => ({
@@ -57,10 +73,7 @@ const aggregateVotes = (voteGroups) => {
 const getPosts = async (userId) => {
   const posts = await prisma.post.findMany({
     orderBy: { createdAt: 'desc' },
-    select: {
-      id: true, title: true, content: true, imageUrl: true, createdAt: true, userId: true,
-      user: { select: { username: true } },
-    },
+    select: POST_SELECT,
   });
 
   const postIds = posts.map((p) => p.id);
@@ -110,10 +123,7 @@ const getPosts = async (userId) => {
 const getPostById = async (postId) => {
   const post = await prisma.post.findFirst({
     where: { id: postId },
-    select: {
-      id: true, title: true, content: true, imageUrl: true, createdAt: true, userId: true,
-      user: { select: { username: true } },
-    },
+    select: POST_SELECT,
   });
   if (!post) return null;
 
@@ -186,28 +196,32 @@ const getComments = async (postId, userId) => {
     : [];
   const likedSet = new Set(myLikes.map((l) => l.commentId));
 
-  return Promise.all(
-    comments.map(async (c) => ({
-      id: c.id,
-      content: c.content,
-      created_at: c.createdAt,
-      user_id: c.userId,
-      username: c.user.username,
-      profilePicture: await profilePictureUrl(c.userId),
-      timeSinceCommented: minutesAgo(c.createdAt),
-      likeCount: Number(c._count.likes),
-      userLiked: likedSet.has(c.id),
-      replies: await Promise.all(
-        replies
-          .filter((r) => r.parentCommentId === c.id)
-          .map(async (reply) => ({
-            ...toReplyShape(reply),
-            profilePicture: await profilePictureUrl(reply.userId),
-            timeSinceReplied: minutesAgo(reply.createdAt),
-          }))
-      ),
-    }))
-  );
+  const pictureMap = await profilePictures([
+    ...comments.map((c) => c.userId),
+    ...replies.map((r) => r.userId),
+  ]);
+
+  const repliesByComment = {};
+  for (const reply of replies) {
+    (repliesByComment[reply.parentCommentId] ??= []).push({
+      ...toReplyShape(reply),
+      profilePicture: pictureMap.get(reply.userId) ?? '',
+      timeSinceReplied: minutesAgo(reply.createdAt),
+    });
+  }
+
+  return comments.map((c) => ({
+    id: c.id,
+    content: c.content,
+    created_at: c.createdAt,
+    user_id: c.userId,
+    username: c.user.username,
+    profilePicture: pictureMap.get(c.userId) ?? '',
+    timeSinceCommented: minutesAgo(c.createdAt),
+    likeCount: Number(c._count.likes),
+    userLiked: likedSet.has(c.id),
+    replies: repliesByComment[c.id] ?? [],
+  }));
 };
 
 const getCommentsById = async (commentId, userId) => {
@@ -226,37 +240,37 @@ const getCommentsById = async (commentId, userId) => {
     select: { id: true, content: true, createdAt: true, userId: true, user: { select: { username: true } } },
   });
 
-  const shapedReplies = await Promise.all(
-    replies.map(async (reply) => {
-      const likeCountReply = await prisma.like.count({ where: { commentId: reply.id } });
-      const userLikedReply = !!(await prisma.like.findUnique({
-        where: { commentId_userId: { commentId: reply.id, userId } },
-        select: { id: true },
-      }));
+  const replyIds = replies.map((r) => r.id);
+  const countGroups = replyIds.length
+    ? await prisma.like.groupBy({ by: ['commentId'], _count: { _all: true }, where: { commentId: { in: replyIds } } })
+    : [];
+  const replyLikeCounts = new Map();
+  for (const group of countGroups) replyLikeCounts.set(group.commentId, Number(group._count._all));
 
-      return {
-        ...toReplyShape(reply),
-        profilePicture: await profilePictureUrl(reply.userId),
-        timeSinceReplied: minutesAgo(reply.createdAt),
-        likeCount: likeCountReply,
-        userLiked: userLikedReply,
-      };
-    })
-  );
+  const myLikes = await prisma.like.findMany({
+    where: { userId, commentId: { in: [commentId, ...replyIds] } },
+    select: { commentId: true },
+  });
+  const likedSet = new Set(myLikes.map((l) => l.commentId));
+
+  const pictureMap = await profilePictures([comment.userId, ...replies.map((r) => r.userId)]);
 
   return {
     id: comment.id,
     content: comment.content,
     created_at: comment.createdAt,
     username: comment.user.username,
-    profilePicture: await profilePictureUrl(comment.userId),
+    profilePicture: pictureMap.get(comment.userId) ?? '',
     timeSinceCommented: minutesAgo(comment.createdAt),
     likeCount: Number(comment._count.likes),
-    userLiked: !!(await prisma.like.findUnique({
-      where: { commentId_userId: { commentId: comment.id, userId } },
-      select: { id: true },
+    userLiked: likedSet.has(comment.id),
+    replies: replies.map((reply) => ({
+      ...toReplyShape(reply),
+      profilePicture: pictureMap.get(reply.userId) ?? '',
+      timeSinceReplied: minutesAgo(reply.createdAt),
+      likeCount: replyLikeCounts.get(reply.id) ?? 0,
+      userLiked: likedSet.has(reply.id),
     })),
-    replies: shapedReplies,
   };
 };
 

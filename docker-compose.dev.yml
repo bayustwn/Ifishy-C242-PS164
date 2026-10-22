@@ -19,6 +19,17 @@ services:
       timeout: 5s
       retries: 30
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6399:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
   backend:
     build:
       context: ./CloudComputing
@@ -35,6 +46,7 @@ services:
       DB_USER: ifishy_dev
       DB_PASS: ifishy_pass
       DATABASE_URL: mysql://ifishy_dev:ifishy_pass@db:3306/ifishy
+      REDIS_URL: redis://redis:6379
     volumes:
       - uploads:/usr/src/app/uploads
       - ./CloudComputing/src:/usr/src/app/src
@@ -45,6 +57,8 @@ services:
       - ./CloudComputing/jest.config.js:/usr/src/app/jest.config.js
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 volumes:

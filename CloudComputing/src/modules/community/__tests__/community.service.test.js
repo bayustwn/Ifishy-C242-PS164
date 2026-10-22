@@ -9,8 +9,8 @@ const mockPrisma = {
   share: { groupBy: jest.fn(), findFirst: jest.fn(), create: jest.fn() },
   comment: { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), findFirst: jest.fn() },
   reply: { findMany: jest.fn(), create: jest.fn() },
-  like: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), delete: jest.fn(), count: jest.fn() },
-  user: { findUnique: jest.fn() },
+  like: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), delete: jest.fn(), count: jest.fn(), groupBy: jest.fn() },
+  user: { findUnique: jest.fn(), findMany: jest.fn() },
 };
 const prisma = mockPrisma;
 const service = require('../community.service');
@@ -152,12 +152,17 @@ describe('community.service', () => {
       { id: 32, content: 'r2', createdAt: d3, parentCommentId: 12, userId: 3, user: { username: 'cita' } },
     ]);
     prisma.like.findMany.mockResolvedValue([{ commentId: 12 }]);
-    prisma.user.findUnique.mockResolvedValue({ profilePhoto: 'pf.png' });
+    prisma.user.findMany.mockResolvedValue([
+      { id: 2, profilePhoto: 'pf.png' },
+      { id: 3, profilePhoto: 'pf.png' },
+    ]);
 
     const comments = await service.getComments(5, 9);
 
     expect(prisma.reply.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { parentCommentId: { in: [11, 12] } } }));
     expect(prisma.like.findMany).toHaveBeenCalledWith({ where: { userId: 9, commentId: { in: [11, 12] } }, select: { commentId: true } });
+    expect(prisma.user.findMany).toHaveBeenCalledWith({ where: { id: { in: [2, 3] } }, select: { id: true, profilePhoto: true } });
+    expect(prisma.user.findMany).toHaveBeenCalledTimes(1);
     expect(comments[0]).toEqual({
       id: 11, content: 'c1', created_at: d1, user_id: 2, username: 'budi', profilePicture: 'pf.png',
       timeSinceCommented: MINUTES_AGO, likeCount: 3, userLiked: false,
@@ -176,15 +181,18 @@ describe('community.service', () => {
     prisma.reply.findMany.mockResolvedValue([
       { id: 31, content: 'r', createdAt: d2, parentCommentId: 11, userId: 3, user: { username: 'cita' } },
     ]);
-    prisma.like.count.mockResolvedValue(2);
-    prisma.like.findUnique.mockResolvedValue({ id: 1 });
-    prisma.user.findUnique.mockResolvedValue({ profilePhoto: 'pf.png' });
+    prisma.like.groupBy.mockResolvedValue([{ commentId: 31, _count: { _all: 2 } }]);
+    prisma.like.findMany.mockResolvedValue([{ commentId: 11 }, { commentId: 31 }]);
+    prisma.user.findMany.mockResolvedValue([
+      { id: 2, profilePhoto: 'pf.png' },
+      { id: 3, profilePhoto: 'pf.png' },
+    ]);
 
     const comment = await service.getCommentsById(11, 9);
 
-    expect(prisma.like.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { commentId_userId: { commentId: 31, userId: 9 } } })
-    );
+    expect(prisma.like.groupBy).toHaveBeenCalledWith({ by: ['commentId'], _count: { _all: true }, where: { commentId: { in: [31] } } });
+    expect(prisma.like.findMany).toHaveBeenCalledWith({ where: { userId: 9, commentId: { in: [11, 31] } }, select: { commentId: true } });
+    expect(prisma.user.findMany).toHaveBeenCalledTimes(1);
     expect(comment).toEqual({
       id: 11, content: 'c', created_at: d1, username: 'budi', profilePicture: 'pf.png',
       timeSinceCommented: MINUTES_AGO, likeCount: 7, userLiked: true,

@@ -1,4 +1,5 @@
 const { jwtVerify } = require('jose');
+const guard = require('../../shared/guard');
 const usersService = require('./users.service');
 const { updateUserSchema, photoUserIdSchema, emailParamsSchema } = require('./users.schema');
 const { saveFileToDisk, profileFolder } = require('../../shared/storage');
@@ -10,159 +11,124 @@ const getUserIdFromToken = async (token) => {
   return payload.id;
 };
 
-const getAllUsers = async (req, res) => {
-  try {
-    const users = await usersService.getAllUsers();
-    return res.status(200).json({ success: true, users });
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    return res.status(500).json({ success: false, message: 'Failed to fetch users' });
-  }
-};
+const getAllUsers = guard('Error fetching users', 'Failed to fetch users', async (req, res) => {
+  const users = await usersService.getAllUsers();
+  return res.status(200).json({ success: true, users });
+});
 
-const updateUser = async (req, res) => {
+const updateUser = guard('Error in updateUserProfile', 'Failed to update user profile', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({ success: false, message: 'Token is required' });
   }
 
-  try {
-    const parsed = updateUserSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(500).json({ success: false, message: 'Failed to update user profile' });
-    }
-
-    const userId = await getUserIdFromToken(token);
-    const result = await usersService.updateUser(userId, parsed.data);
-
-    if (result === 'not_found') {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-    if (result === 'incorrect_password') {
-      return res.status(400).json({ success: false, message: 'Incorrect password' });
-    }
-
-    return res.status(200).json({ success: true, message: 'User profile updated successfully' });
-  } catch (error) {
-    console.error('Error in updateUserProfile:', error);
+  const parsed = updateUserSchema.safeParse(req.body);
+  if (!parsed.success) {
     return res.status(500).json({ success: false, message: 'Failed to update user profile' });
   }
-};
 
-const deleteUserAccount = async (req, res) => {
+  const userId = await getUserIdFromToken(token);
+  const result = await usersService.updateUser(userId, parsed.data);
+
+  if (result === 'not_found') {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+  if (result === 'incorrect_password') {
+    return res.status(400).json({ success: false, message: 'Incorrect password' });
+  }
+
+  return res.status(200).json({ success: true, message: 'User profile updated successfully' });
+});
+
+const deleteUserAccount = guard('Error in deleteUserAccount', 'Failed to delete user account', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({ success: false, message: 'Token is required' });
   }
 
-  try {
-    const userId = await getUserIdFromToken(token);
-    const result = await usersService.deleteUserAccount(userId);
+  const userId = await getUserIdFromToken(token);
+  const result = await usersService.deleteUserAccount(userId);
 
-    if (result === 'not_found') {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    return res.status(200).json({ success: true, message: 'User account deleted successfully' });
-  } catch (error) {
-    console.error('Error in deleteUserAccount:', error);
-    return res.status(500).json({ success: false, message: 'Failed to delete user account' });
+  if (result === 'not_found') {
+    return res.status(404).json({ success: false, message: 'User not found' });
   }
-};
 
-const uploadProfilePhoto = async (req, res) => {
-  try {
-    const parsed = photoUserIdSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return res.status(400).json({ success: false, message: 'No file uploaded' });
-    }
+  return res.status(200).json({ success: true, message: 'User account deleted successfully' });
+});
 
-    const file = req.file;
-    if (!file) {
-      return res.status(400).json({ success: false, message: 'No file uploaded' });
-    }
-
-    const publicUrl = await saveFileToDisk(req, file, profileFolder);
-    await usersService.setProfilePhotoByUserId(parsed.data.userId, publicUrl);
-
-    return res.status(200).json({
-      success: true,
-      message: 'Profile photo uploaded successfully!',
-      photoUrl: publicUrl,
-    });
-  } catch (error) {
-    console.error('Error in uploadProfilePhoto:', error);
-    return res.status(500).json({ success: false, message: 'Failed to upload profile photo' });
+const uploadProfilePhoto = guard('Error in uploadProfilePhoto', 'Failed to upload profile photo', async (req, res) => {
+  const parsed = photoUserIdSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, message: 'No file uploaded' });
   }
-};
 
-const updatePhotoProfile = async (req, res) => {
-  try {
-    const file = req.file;
-    if (!file) {
-      return res.status(400).json({ success: false, message: 'No file uploaded' });
-    }
-
-    const newImageUrl = await saveFileToDisk(req, file, profileFolder);
-    await usersService.setProfilePhotoByUserId(req.user.id, newImageUrl);
-
-    return res.status(200).json({
-      success: true,
-      message: 'Profile photo updated successfully!',
-      imageUrl: newImageUrl,
-    });
-  } catch (error) {
-    console.error('Error in updatePhotoProfile:', error);
-    return res.status(500).json({ success: false, message: 'Failed to update profile photo' });
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ success: false, message: 'No file uploaded' });
   }
-};
 
-const getDashboardData = async (req, res) => {
-  try {
-    const parsed = emailParamsSchema.safeParse(req.params);
-    if (!parsed.success) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+  const publicUrl = await saveFileToDisk(req, file, profileFolder);
+  await usersService.setProfilePhotoByUserId(parsed.data.userId, publicUrl);
 
-    const data = await usersService.getDashboardByEmail(parsed.data.email);
-    if (!data) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+  return res.status(200).json({
+    success: true,
+    message: 'Profile photo uploaded successfully!',
+    photoUrl: publicUrl,
+  });
+});
 
-    return res.status(200).json({
-      success: true,
-      message: 'Dashboard data retrieved successfully',
-      data,
-    });
-  } catch (error) {
-    console.error('Error in getDashboardData:', error);
-    return res.status(500).json({ success: false, message: 'Failed to retrieve dashboard data' });
+const updatePhotoProfile = guard('Error in updatePhotoProfile', 'Failed to update profile photo', async (req, res) => {
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ success: false, message: 'No file uploaded' });
   }
-};
 
-const getUserProfile = async (req, res) => {
-  try {
-    const parsed = emailParamsSchema.safeParse(req.params);
-    if (!parsed.success) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+  const newImageUrl = await saveFileToDisk(req, file, profileFolder);
+  await usersService.setProfilePhotoByUserId(req.user.id, newImageUrl);
 
-    const profile = await usersService.getProfileByEmail(parsed.data.email);
-    if (!profile) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+  return res.status(200).json({
+    success: true,
+    message: 'Profile photo updated successfully!',
+    imageUrl: newImageUrl,
+  });
+});
 
-    return res.status(200).json({
-      success: true,
-      message: 'User profile retrieved successfully',
-      profile,
-    });
-  } catch (error) {
-    console.error('Error in getUserProfile:', error);
-    return res.status(500).json({ success: false, message: 'Failed to retrieve user profile' });
+const getDashboardData = guard('Error in getDashboardData', 'Failed to retrieve dashboard data', async (req, res) => {
+  const parsed = emailParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(404).json({ success: false, message: 'User not found' });
   }
-};
+
+  const data = await usersService.getDashboardByEmail(parsed.data.email);
+  if (!data) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: 'Dashboard data retrieved successfully',
+    data,
+  });
+});
+
+const getUserProfile = guard('Error in getUserProfile', 'Failed to retrieve user profile', async (req, res) => {
+  const parsed = emailParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  const profile = await usersService.getProfileByEmail(parsed.data.email);
+  if (!profile) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: 'User profile retrieved successfully',
+    profile,
+  });
+});
 
 module.exports = { getAllUsers, updateUser, deleteUserAccount, uploadProfilePhoto, updatePhotoProfile, getDashboardData, getUserProfile };

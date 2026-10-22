@@ -7,8 +7,8 @@ const mockPrisma = {
     deleteMany: jest.fn(),
     findMany: jest.fn(),
   },
-  post: { findUnique: jest.fn() },
-  article: { findUnique: jest.fn() },
+  post: { findUnique: jest.fn(), findMany: jest.fn() },
+  article: { findUnique: jest.fn(), findMany: jest.fn() },
   $disconnect: jest.fn(),
 };
 
@@ -60,14 +60,15 @@ describe('getBookmarks', () => {
       { id: 2, type: 'post', itemId: 11, createdAt: t2 },
       { id: 1, type: 'article', itemId: 22, createdAt: t1 },
     ]);
-    mockPrisma.post.findUnique.mockResolvedValue({ title: 'BMUD post' });
-    mockPrisma.article.findUnique.mockResolvedValue({ title: 'BMUD article' });
+    mockPrisma.post.findMany.mockResolvedValue([{ id: 11, title: 'BMUD post' }]);
+    mockPrisma.article.findMany.mockResolvedValue([{ id: 22, title: 'BMUD article' }]);
 
     const list = await bookmarkService.getBookmarks(1);
 
     expect(mockPrisma.bookmark.findMany).toHaveBeenCalledWith({ where: { userId: 1 }, orderBy: { createdAt: 'desc' } });
-    expect(mockPrisma.post.findUnique).toHaveBeenCalledWith({ where: { id: 11 }, select: { title: true } });
-    expect(mockPrisma.article.findUnique).toHaveBeenCalledWith({ where: { id: 22 }, select: { title: true } });
+    expect(mockPrisma.post.findMany).toHaveBeenCalledWith({ where: { id: { in: [11] } }, select: { id: true, title: true } });
+    expect(mockPrisma.article.findMany).toHaveBeenCalledWith({ where: { id: { in: [22] } }, select: { id: true, title: true } });
+    expect(mockPrisma.post.findUnique).not.toHaveBeenCalled();
     expect(list[0]).toStrictEqual({ id: 2, type: 'post', item_id: 11, title: 'BMUD post', created_at: t2 });
     expect(list[1]).toStrictEqual({ id: 1, type: 'article', item_id: 22, title: 'BMUD article', created_at: t1 });
   });

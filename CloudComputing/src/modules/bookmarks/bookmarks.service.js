@@ -44,9 +44,19 @@ const getBookmarks = async (userId) => {
     orderBy: { createdAt: 'desc' },
   });
 
-  return Promise.all(
-    bookmarks.map(async (b) => toBookmarkShape(b, await titleFor(b.type, b.itemId)))
-  );
+  const postIds = [...new Set(bookmarks.filter((b) => b.type === 'post').map((b) => b.itemId))];
+  const articleIds = [...new Set(bookmarks.filter((b) => b.type === 'article').map((b) => b.itemId))];
+
+  const [posts, articles] = await Promise.all([
+    postIds.length ? prisma.post.findMany({ where: { id: { in: postIds } }, select: { id: true, title: true } }) : [],
+    articleIds.length ? prisma.article.findMany({ where: { id: { in: articleIds } }, select: { id: true, title: true } }) : [],
+  ]);
+
+  const titles = new Map();
+  for (const post of posts) titles.set(`post:${post.id}`, post.title);
+  for (const article of articles) titles.set(`article:${article.id}`, article.title);
+
+  return bookmarks.map((b) => toBookmarkShape(b, titles.get(`${b.type}:${b.itemId}`) ?? null));
 };
 
 const getBookmarkById = async (userId, id) => {
