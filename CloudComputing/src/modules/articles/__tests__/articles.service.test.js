@@ -1,7 +1,7 @@
 // Unit test articles.service: mock prisma & puppeteer; jalankan via `npm test`.
-const puppeteerState = { launch: jest.fn() };
+const mockPuppeteerState = { launch: jest.fn() };
 
-jest.mock('puppeteer', () => ({ launch: (...args) => puppeteerState.launch(...args) }));
+jest.mock('puppeteer', () => ({ launch: (...args) => mockPuppeteerState.launch(...args) }));
 
 const mockPrisma = {
   article: {
@@ -21,14 +21,14 @@ const fakeBrowserFor = (evaluateResult) => {
     goto: jest.fn(),
     evaluate: jest.fn().mockResolvedValue(evaluateResult),
   };
-  const fakeBrowser = { newPage: jest.fn().mockResolvedValue(fakePage), close: jest.fn() };
-  puppeteerState.launch.mockResolvedValue(fakeBrowser);
+  const fakeBrowser = { newPage: jest.fn().mockResolvedValue(fakePage), close: jest.fn().mockResolvedValue() };
+  mockPuppeteerState.launch.mockResolvedValue(fakeBrowser);
   return { fakePage, fakeBrowser };
 };
 
 beforeEach(() => {
   jest.resetAllMocks();
-  puppeteerState.launch.mockReset();
+  mockPuppeteerState.launch.mockReset();
 });
 
 describe('getArticleById', () => {
@@ -76,7 +76,7 @@ describe('fetchAndSaveFromUrl', () => {
 
     const out = await articlesService.fetchAndSaveFromUrl('https://contoh.com/isi');
 
-    expect(puppeteerState.launch).toHaveBeenCalled();
+    expect(mockPuppeteerState.launch).toHaveBeenCalled();
     expect(fakePage.goto).toHaveBeenCalledWith('https://contoh.com/isi');
     expect(mockPrisma.article.create).toHaveBeenCalledWith({
       data: { title: 'T', content: 'C', author: 'A', coverImage: 'c.jpg', publishedAt: new Date('2024-05-01T08:00:00Z') },
@@ -90,12 +90,18 @@ describe('fetchAndSaveFromUrl', () => {
       title: 'T', content: 'C', author: 'A', coverImage: 'c.jpg', images: [], publicationTime: 'Unknown publication date',
     });
 
-    await expect(articlesService.fetchAndSaveFromUrl('https://contoh.com/x')).rejects.toThrow('Invalid Date');
+    const rejected = await articlesService.fetchAndSaveFromUrl('https://contoh.com/x').then(
+      () => null,
+      (e) => e
+    );
+    // service melempar objek Date invalid (bukan Error) — assert perilakunya persis
+    expect(rejected).toBeInstanceOf(Date);
+    expect(Number.isNaN(rejected.getTime())).toBe(true);
     expect(mockPrisma.article.create).not.toHaveBeenCalled();
   });
 
   test('puppeteer gagal → {message:"Failed to scrape article"}', async () => {
-    puppeteerState.launch.mockRejectedValue(new Error('launch timeout'));
+    mockPuppeteerState.launch.mockRejectedValue(new Error('launch timeout'));
 
     const out = await articlesService.fetchAndSaveFromUrl('https://contoh.com/x');
 
