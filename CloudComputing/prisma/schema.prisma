@@ -27,12 +27,14 @@ model User {
 }
 
 model Post {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  title     String   @db.VarChar(200)
-  content   String   @db.Text
-  imageUrl  String?  @map("image_url") @db.VarChar(500)
-  createdAt DateTime @default(now()) @map("created_at")
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  title        String   @db.VarChar(200)
+  content      String   @db.Text
+  imageUrl     String?  @map("image_url") @db.VarChar(500)
+  createdAt    DateTime @default(now()) @map("created_at")
+  upvoteCount  Int      @default(0) @map("upvote_count")
+  downvoteCount Int     @default(0) @map("downvote_count")
 
   user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   comments Comment[]
