@@ -1,6 +1,5 @@
 const guard = require('../../shared/guard');
 const firstIssueMessage = require('../../shared/validation');
-const { parsePagination } = require('../../shared/pagination');
 const { ok, fail } = require('../../shared/response');
 const logger = require('../../shared/logger');
 const r2 = require('../../shared/r2');
@@ -27,11 +26,6 @@ const replacePhoto = async (userId, imageKey) => {
 
   return { url: r2.resolveMediaUrl(imageKey) };
 };
-
-const getAllUsers = guard('Error fetching users', 'Failed to fetch users', async (req, res) => {
-  const users = await usersService.getAllUsers(parsePagination(req.query));
-  return ok(res, users);
-});
 
 const updateUser = guard('Error in updateUserProfile', 'Failed to update user profile', async (req, res) => {
   const parsed = updateUserSchema.safeParse(req.body ?? {});
@@ -120,4 +114,4 @@ const getUserProfile = guard('Error in getUserProfile', 'Failed to retrieve user
   return ok(res, profile, 'User profile retrieved successfully');
 });
 
-module.exports = { getAllUsers, updateUser, deleteUserAccount, uploadProfilePhoto, updatePhotoProfile, getDashboardData, getUserProfile };
+module.exports = { updateUser, deleteUserAccount, uploadProfilePhoto, updatePhotoProfile, getDashboardData, getUserProfile };

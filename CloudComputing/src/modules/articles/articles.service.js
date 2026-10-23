@@ -3,6 +3,7 @@ const prisma = require('../../shared/prisma');
 const cache = require('../../shared/cache');
 const logger = require('../../shared/logger');
 const { sliceArgs } = require('../../shared/pagination');
+const { assertPublicHttpUrl } = require('../../shared/urlSafety');
 
 const CACHE_KEY = 'articles:list:v1';
 
@@ -44,6 +45,34 @@ const scrapeArticle = async (url) => {
   try {
     browser = await puppeteer.launch();
     const page = await browser.newPage();
+    const allowedOrigins = new Map();
+    const isAllowed = (targetUrl) => {
+      let origin;
+      try {
+        origin = new URL(targetUrl).origin;
+      } catch {
+        return Promise.resolve(false);
+      }
+      if (!allowedOrigins.has(origin)) {
+        allowedOrigins.set(
+          origin,
+          assertPublicHttpUrl(targetUrl).then(() => true).catch(() => false),
+        );
+      }
+      return allowedOrigins.get(origin);
+    };
+
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      if (!/^https?:\/\//i.test(request.url())) {
+        request.continue();
+        return;
+      }
+      isAllowed(request.url()).then((allowed) => {
+        if (allowed) request.continue();
+        else request.abort('blockedbyclient');
+      });
+    });
     await page.goto(url);
 
     const result = await page.evaluate(() => {

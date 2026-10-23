@@ -1,6 +1,5 @@
 // Unit test users.controller: auth middleware diuji terpisah; controller memakai req.user.
 jest.mock('../users.service', () => ({
-  getAllUsers: jest.fn(),
   updateUser: jest.fn(),
   deleteUserAccount: jest.fn(),
   replaceProfilePhoto: jest.fn(),

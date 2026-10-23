@@ -1,4 +1,8 @@
 // Unit test articles.controller: mock service; jalankan via `npm test`.
+jest.mock('../../../shared/urlSafety', () => ({
+  assertPublicHttpUrl: jest.fn(),
+}));
+
 jest.mock('../articles.service', () => ({
   getArticleById: jest.fn(),
   getAllArticles: jest.fn(),
@@ -6,6 +10,7 @@ jest.mock('../articles.service', () => ({
 }));
 
 const articlesService = require('../articles.service');
+const { assertPublicHttpUrl } = require('../../../shared/urlSafety');
 const controller = require('../articles.controller');
 
 const fakeRes = () => {
@@ -26,7 +31,10 @@ const call = (handler, req) => {
   return Promise.resolve(handler(req, res)).then(() => res);
 };
 
-beforeEach(() => jest.resetAllMocks());
+beforeEach(() => {
+  jest.resetAllMocks();
+  assertPublicHttpUrl.mockImplementation(async (value) => new URL(value));
+});
 
 describe('getArticleById', () => {
   test('service null → 404 "Article not found"', async () => {
@@ -66,6 +74,17 @@ describe('getArticleFromUrl', () => {
     const res = await call(controller.getArticleFromUrl, { params: {} });
     expect(res.statusCode).toBe(400);
     expect(res.body.error.message).toBe('URL parameter is required');
+    expect(articlesService.fetchAndSaveFromUrl).not.toHaveBeenCalled();
+  });
+
+  test('URL privat → 400 dan service tidak dipanggil', async () => {
+    assertPublicHttpUrl.mockRejectedValueOnce(Object.assign(new Error('private'), { code: 'UNSAFE_URL' }));
+
+    const res = await call(controller.getArticleFromUrl, { params: { url: 'http://127.0.0.1/admin' } });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(res.body.error.message).toBe('URL must be a public http(s) address');
     expect(articlesService.fetchAndSaveFromUrl).not.toHaveBeenCalled();
   });
 

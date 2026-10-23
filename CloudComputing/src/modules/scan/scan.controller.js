@@ -48,10 +48,6 @@ const getScanHistoryById = guard('Error saat mengambil scan history', 'Gagal men
     Number(parsed.data.userId),
     parsePagination(req.query),
   );
-  if (histories.length === 0) {
-    return fail(res, 404, 'NOT_FOUND', 'Scan history tidak ditemukan untuk user ini.');
-  }
-
   return ok(res, histories, 'Scan history berhasil diambil!');
 });
 

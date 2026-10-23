@@ -2,12 +2,6 @@ const bcrypt = require('bcrypt');
 const prisma = require('../../shared/prisma');
 const logger = require('../../shared/logger');
 const { publicUrl, deleteUserObjects } = require('../../shared/r2');
-const { sliceArgs } = require('../../shared/pagination');
-
-const publicColumns = { id: true, username: true, email: true };
-
-const getAllUsers = async (opts = {}) =>
-  prisma.user.findMany({ select: publicColumns, ...sliceArgs(opts) });
 
 const toProfileRow = ({ id, username, email, profilePhoto }) => ({
   id,
@@ -78,4 +72,4 @@ const getDashboardByEmail = async (email) => {
 
 const getProfileByEmail = getDashboardByEmail;
 
-module.exports = { getAllUsers, updateUser, deleteUserAccount, replaceProfilePhoto, getDashboardByEmail, getProfileByEmail };
+module.exports = { updateUser, deleteUserAccount, replaceProfilePhoto, getDashboardByEmail, getProfileByEmail };

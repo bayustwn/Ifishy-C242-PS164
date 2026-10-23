@@ -3,27 +3,47 @@
 <br>
 The architecture of IFISHY involves:
 
-- Cloud Run: Handles both the backend and Python-based prediction API.
+- Cloud Run: Handles the backend API. Fish disease prediction runs on-device in the mobile app.
 - Cloud SQL: Manages relational database operations.
-- Cloud Storage: Stores user-uploaded files like profile photos and posts.
+- Cloudflare R2: Stores user images (avatars, post images, scan images) in a public bucket.
 - Artifact Registry: Manages Docker container images.
-- Logging: allowing for centralized monitoring of the system’s behavior and performance.
+- Logging: Centralized monitoring through structured application logs.
 
 # [Google Cloud Price Outlook Preview](https://cloud.google.com/products/calculator/estimate-preview/CiQwZjU5NWZkNS00OTY4LTRjYTEtYmYwZi1iYjdkYWZjNjVjNTAQAg==?hl=en)
-The Google Cloud Estimated Price Preview outlines the services utilized for this project. Artifact Registry is employed for managing container images, specifically for inter-region egress and storage. Cloud Run is used for deploying both the Backend API and FastAPI, leveraging scalable CPU and memory allocation to handle API requests efficiently.
+The Google Cloud Estimated Price Preview outlines the services utilized for this project. Artifact Registry is employed for managing container images, specifically for inter-region egress and storage. Cloud Run is used for deploying the Backend API, leveraging scalable CPU and memory allocation to handle API requests efficiently.
 
-Cloud SQL (MySQL) serves as the primary database, operating regionally in Jakarta with a micro-instance and zonal standard storage to manage user and application data. Cloud Storage is utilized to store application assets, such as images and related files, in the Jakarta region.
+Cloud SQL (MySQL) serves as the primary database, operating regionally in Jakarta with a micro-instance and zonal standard storage to manage user and application data. Image assets are stored in Cloudflare R2 and served through a public custom domain.
 
 # [Ifishy API Endpoints Documentation](https://docs.google.com/spreadsheets/d/1AnR8ifyktgZRyspRoGS_CgjIDOoaJQElb6PeBWj_5q8/edit?gid=0#gid=0)
-This API supports various features for user management, community interaction, article access, and fish disease detection. Endpoints like `/users`, `/dashboard/:email`, and `/profile/:email` provide access to user data, including profiles and dashboards. Users can update their information through `/update` or delete their accounts with `/delete`. Profile photos are managed via `/upload-photo` and `/update-photo-profile`.
+This API supports user management, community interaction, and article access. This README is authoritative for the current R2 upload flow; update the linked spreadsheet separately if it still describes multipart uploads.
 
-Community features include creating, updating, and interacting with posts through endpoints such as `/community/posts` for creating or accessing post lists, and `/community/posts/:postId` for post details or updates. Comments and replies can be added or viewed via `/community/posts/:postId/comments` and `/comments/:commentId/reply`. Users can also `upvote/downvote` posts and check their voting status through relevant endpoints.
+- `/dashboard/:email` and `/profile/:email` expose user data.
+- `PUT /update` and `DELETE /delete` require a Bearer token.
+- Profile photos are attached through `POST /upload-photo` or `PUT /update-photo-profile` using an existing `imageKey`.
+- Community posts, comments, replies, votes, shares, and bookmarks are available under `/community`, `/comments`, and `/bookmark`.
+- `/articles` and `/articles/:id` expose articles; `/article/scrape/:url` requires a Bearer token and only accepts public `http(s)` URLs (private, loopback, link-local, and metadata addresses are rejected).
+- `POST /scan-history` saves a scan, while `GET /scan-history/:userId` requires a token and only returns the caller's own history. An empty history returns `200` with `data: []`.
+- The backend does not expose `/predict`; prediction and image compression are handled on-device by the mobile app.
 
-Articles can be accessed using `/articles` for a list or `/articles/:id` for details. The bookmark feature allows saving favorite articles or posts through `/bookmark` and `/bookmarks`.
+## Image Upload Flow
+The backend does not accept multipart image uploads. Images are uploaded directly to Cloudflare R2 with a presigned URL:
 
-For fish disease detection, the `/scan-history` endpoint allows saving scan results, while `/scan-history/:userId` retrieves the scan history for a specific user ID.
+1. `POST /api/auth/uploads/presign` with `{ purpose, contentType, size }`.
+2. Upload the file bytes with HTTP `PUT` to the returned `uploadUrl`, sending the returned `Content-Type` header.
+3. `POST /api/auth/uploads/complete` with `{ key }` to verify the object exists, its size/type are allowed, and its magic bytes match the declared image type.
+4. Attach the returned `key` as `imageKey` on the target endpoint (avatar, post, or scan).
 
-The `/predict` endpoint is designed to handle fish disease detection. Users can upload an image file, and the API processes the image to provide a prediction result, identifying the disease and its confidence level. This endpoint serves as the core of the application’s fish health analysis feature, leveraging machine learning for accurate predictions.
+Upload policies:
+
+| Purpose | Prefix | Max size | Content types |
+| --- | --- | --- | --- |
+| `avatar` | `avatars/{userId}/` | 5 MB | JPEG, PNG, WebP |
+| `post` | `posts/{userId}/` | 10 MB | JPEG, PNG, WebP |
+| `scan` | `scans/{userId}/` | 15 MB | JPEG, PNG, WebP |
+
+Object keys use the format `{prefix}/{userId}/{uuid}.{ext}`. Uploaded images are public and served from `R2_PUBLIC_BASE_URL`. Upload IDs and keys are not secrets. There is no per-user upload quota; clients should compress images before requesting a presigned URL.
+
+`DELETE /api/auth/uploads` removes an unattached upload. It returns `409 CONFLICT` when the key is still referenced by a profile photo, post, or scan. Replacing a profile photo or post image deletes the old object immediately, and deleting an account removes all of its objects; the cleanup script is only for orphaned objects left by interrupted operations.
 
 # Technology Stack
 IFISHY utilizes a robust and modern tech stack for its development and deployment:
@@ -31,131 +51,147 @@ IFISHY utilizes a robust and modern tech stack for its development and deploymen
 ### Backend
 - Node.js: The core runtime environment for backend development.
 - Express.js: A lightweight framework for routing and middleware.
-- Nodemon: For automatic server reloading during development.
-- Sequelize: ORM for MySQL database management.
-- Axios: For HTTP requests and API integration.
-- Multer: To handle file uploads.
-- Form-data: Used for working with `multipart/form-data` in HTTP requests.
-- Cheerio: For scraping web pages and extracting data.
-- Puppeteer: Headless browser used for scraping and interacting with web pages.
+- Prisma: ORM and migration tool for MySQL.
+- Cloudflare R2: S3-compatible object storage for user images.
+- Redis: Cache and distributed rate limiting (falls back to in-memory limits when unset).
+- jose: JWT signing and verification.
+- bcrypt: Password hashing.
+- Zod: Request validation.
+- Puppeteer: Headless browser used by the article scraping endpoint.
+- Pino: Structured logging.
 
 ### Google Cloud Platform (GCP)
 - Cloud Run: To deploy containerized backend APIs.
-- Cloud Storage: To store images and other user data.
 - Cloud SQL (MySQL): For relational database operations.
-- Cloud SQL Connector: To securely connect with MySQL instances.
+- Cloud SQL Connector: To securely connect to MySQL instances.
+- Artifact Registry: To store backend container images.
 
-### Additional Libraries
-- jsonwebtoken: For secure authentication with JWT.
-- bcrypt: To hash user passwords.
-- dotenv: To manage environment variables securely.
+# Running Locally
+Prerequisites: Node.js 22+, MySQL, and (optionally) Redis. R2 is required only for upload-related endpoints.
 
-# Deployment Process to Cloud Run via Docker and Artifact Registry
-Below are the steps to deploy the IFISHY application using Google Cloud Platform:
-
-### Step 1: Prepare the Environment
-1. Install Dependencies
-
-    Run `npm install` to install all required libraries listed in the `package.json`.
-
-2. Configure Environment Variables
-
-    Create a `.env` file in the root folder with the following structure:
-```
-    JWT_SECRET= <YOUR_JWT_SECRET>
-    DB_NAME=<DATABASE_NAME>
-    DB_USER=<DATABASE_USER>
-    DB_PASS=<DATABASE_PASSWORD>
-    DB_HOST=<DATABASE_HOST>
-    DB_PORT=<DATABASE_PORT>
-    DB_SOCKET_PATH=/cloudsql/<INSTANCE_CONNECTION_NAME>
-    PORT=8080
-    GCP_BUCKET_NAME=<YOUR_BUCKET_NAME>
-    GCP_CREDENTIALS_PATH=service-account-key.json
-```
-
-### Step 2: Create a Docker Image
-1. Dockerfile: Use the following configuration:
-```
-FROM node:18-alpine
-WORKDIR /usr/src/app
-COPY package*.json ./
-RUN npm install
-COPY . .
-EXPOSE 8080
-CMD ["node", "server.js"]
-```
-2. Build the Image:
-
-Run `docker build -t ifishy-backend .`
-
-### Step 3: Deploy to Cloud Run
-1. Push the Image to Artifact Registry:
-
-    Tag the image and push it:
-```
-docker tag ifishy-backend REGION-docker.pkg.dev/PROJECT-ID/REPOSITORY/ifishy-backend
-docker push REGION-docker.pkg.dev/PROJECT-ID/REPOSITORY/ifishy-backend
-```
-2. Deploy the Image:
-```
-gcloud run deploy ifishy-backend --image REGION-docker.pkg.dev/PROJECT-ID/REPOSITORY/ifishy-backend --platform managed --region asia-southeast2 --allow-unauthenticated
-```
-
-### Step 4: Set Up the Database
-1. Cloud SQL Instance: Create a MySQL instance in the `asia-southeast2` region.
-2. Migrate Database: Use Sequelize CLI or other tools to apply migrations.
-
-### Step 5: Test and Monitor
-1. Access the application via the Cloud Run URL.
-2. Monitor logs and performance using **Google Cloud Logging**.
-
-# Environment Variables Explanation
-
-The `.env` file contains sensitive information required for the application to function. Here's a breakdown:
-
-- JWT_SECRET: A secret key used to generate JSON Web Tokens.
-- DB_NAME, DB_USER, DB_PASS, DB_HOST, DB_PORT: Database credentials for MySQL.
-- DB_SOCKET_PATH: Connection path for Cloud SQL via Unix sockets.
-- PORT: Application port for server hosting.
-- GCP_BUCKET_NAME: Name of the Cloud Storage bucket for storing images.
-- GCP_CREDENTIALS_PATH: Path to the service account key JSON file.
-
-# Running the IFISHY application both locally and using the URL used
-### Step 1: Clone the Repository
-1. Clone the repository from GitHub:
-```
-git clone https://github.com/SandyAryadika/Ifishy-C242-PS164.git
-cd Ifishy-C242-PS164/CloudComputing
-```
-
-### Step 2: Install Dependencies
-1. Run ```npm install``` to install the necessary dependencies listed in the ```package.json```:
-```
+### Step 1: Install Dependencies
+```bash
 npm install
 ```
 
-### Step 3: Configure Environment Variables Locally
-1. Create a ```.env``` file in the root of the project folder if it doesn’t already exist.
-2. Add the following environment variables to the .env file, [here](https://github.com/SandyAryadika/Ifishy-C242-PS164/tree/main/CloudComputing#deployment-process-to-cloud-run-via-docker-and-artifact-registry) and [the explanation](https://github.com/SandyAryadika/Ifishy-C242-PS164/tree/main/CloudComputing#environment-variables-explanation) [and make sure you use the same depedencies!](https://github.com/SandyAryadika/Ifishy-C242-PS164/tree/main/CloudComputing#technology-stack). [You can find endpoint documentation here](https://docs.google.com/spreadsheets/d/1AnR8ifyktgZRyspRoGS_CgjIDOoaJQElb6PeBWj_5q8/edit?gid=0#gid=0)
+### Step 2: Configure Environment Variables
+Create a `.env` file based on `.env.example`. The minimum required values are `JWT_SECRET` and `DATABASE_URL`.
 
-### Step 4: Run the Application Locally
-1. Run the app locally using the following command:
-```
-npm run dev
-```
-2. Access the application in your browser at `http://localhost:8080`.
-
-### Step 5: Test the Local Application
-1. Ensure that the application is running without any errors.
-2. Use tools like Postman or your browser to test the API locally.
-
-### Step 6: Access the Deployed Application on Cloud Run
-1. After successfully deploying your application to Google Cloud Run, you’ll be given a URL for your application.
-2. Access the live application via the Cloud Run URL. This should be provided in the Google Cloud Console after deployment, and it typically looks like:
-```
-Service URL: https://<your-app-id>-<random-id>.a.run.app
+```env
+PORT=9080
+JWT_SECRET=change-me
+DATABASE_URL=mysql://user:password@127.0.0.1:3307/ifishy
+REDIS_URL=redis://127.0.0.1:6399
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+LOG_LEVEL=info
+R2_ACCOUNT_ID=change-me
+R2_ACCESS_KEY_ID=change-me
+R2_SECRET_ACCESS_KEY=change-me
+R2_BUCKET_PUBLIC=ifishy
+R2_PUBLIC_BASE_URL=https://media.example.com
 ```
 
-### Step 7: Monitor Logs and Performance
-1. Use Google **Cloud Logging** to **monitor** logs and troubleshoot any issues.
+### Step 3: Prepare the Database
+```bash
+npx prisma generate
+npm run prisma:deploy
+npm run db:seed
+```
+
+The seed is idempotent and only inserts the three starter articles when the articles table is empty.
+
+### Step 4: Run the Application
+```bash
+npm run dev:node
+```
+
+The API listens on `PORT` (default `8080`; the local `.env.example` uses `9080`). Verify it with:
+
+```bash
+curl http://localhost:9080/
+curl http://localhost:9080/api/articles
+```
+
+### Step 5: Run Tests
+```bash
+npm test
+npm run lint
+```
+
+# Storage Maintenance
+### Backfill legacy `/uploads`
+Legacy database values such as `/uploads/image-post/foo.png` can be migrated to R2 from a local directory:
+
+```bash
+npm run storage:backfill -- --source=/path/to/uploads
+npm run storage:backfill -- --source=/path/to/uploads --apply
+```
+
+The script is a dry run by default. It validates image signatures, uploads valid files, and rewrites `users.profile_photo`, `posts.image_url`, and `scan_history.fish_image`.
+
+### Remove orphaned objects
+Objects that are not referenced by the database can be removed after a grace period:
+
+```bash
+npm run storage:cleanup
+npm run storage:cleanup -- --apply
+npm run storage:cleanup -- --older-than-hours=48 --apply
+```
+
+The default is a 24-hour dry run. Attached objects are never deleted by the script.
+
+### Legacy static files
+The backend no longer serves `/uploads`; all images must be served from R2 through `R2_PUBLIC_BASE_URL`. Keep `R2_PUBLIC_BASE_URL` pointed at the custom domain bound to the bucket.
+
+# Deployment Process to Cloud Run via Docker and Artifact Registry
+### Step 1: Build the Image
+```bash
+docker build -t ifishy-backend .
+```
+
+### Step 2: Push to Artifact Registry
+```bash
+docker tag ifishy-backend REGION-docker.pkg.dev/PROJECT-ID/REPOSITORY/ifishy-backend
+docker push REGION-docker.pkg.dev/PROJECT-ID/REPOSITORY/ifishy-backend
+```
+
+### Step 3: Deploy to Cloud Run
+```bash
+gcloud run deploy ifishy-backend \
+  --image REGION-docker.pkg.dev/PROJECT-ID/REPOSITORY/ifishy-backend \
+  --platform managed \
+  --region asia-southeast2 \
+  --allow-unauthenticated
+```
+
+Configure the same environment variables in Cloud Run. For Cloud SQL, connect the instance and use the appropriate `DATABASE_URL` (including the Cloud SQL socket path when applicable).
+
+### Step 4: Apply Migrations
+```bash
+npm run prisma:deploy
+npm run db:seed
+```
+
+### Step 5: Test and Monitor
+1. Access the application through the Cloud Run URL.
+2. Use Google Cloud Logging for centralized logs and troubleshooting.
+
+# Environment Variables
+- `PORT`: HTTP port. Default `8080`.
+- `JWT_SECRET`: Secret used to sign and verify JWT access tokens. Required.
+- `DATABASE_URL`: Prisma MySQL connection string. Required.
+- `REDIS_URL`: Optional Redis connection string for cache and distributed rate limiting.
+- `CORS_ORIGINS`: Comma-separated browser origins. When empty, all origins are allowed and a warning is logged.
+- `LOG_LEVEL`: Pino log level. Default `info`.
+- `R2_ACCOUNT_ID`: Cloudflare account ID.
+- `R2_ACCESS_KEY_ID`: R2 access key ID.
+- `R2_SECRET_ACCESS_KEY`: R2 secret access key.
+- `R2_BUCKET_PUBLIC`: R2 bucket used for all public uploads.
+- `R2_PUBLIC_BASE_URL`: Public custom domain for the bucket (for example `https://media.example.com`).
+
+# Operational Notes
+- All image endpoints validate ownership of the object key against the authenticated user.
+- `POST /api/auth/uploads/presign` is limited to 30 requests per minute per IP; the global API limiter allows 300 requests per minute.
+- Access tokens are sent as `Authorization: Bearer <token>`.
+- Scan history is private: a user can only read their own history.
+- Replacing a profile photo or post image deletes the previous R2 object. Deleting an account removes all objects under the user's avatar, post, and scan prefixes.

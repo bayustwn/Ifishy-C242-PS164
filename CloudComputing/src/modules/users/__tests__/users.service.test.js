@@ -1,7 +1,6 @@
 // Unit test users.service: mock prisma & bcrypt; jalankan via `npm test`.
 const mockPrisma = {
   user: {
-    findMany: jest.fn(),
     findUnique: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
@@ -24,17 +23,6 @@ const usersService = require('../users.service');
 beforeEach(() => {
   jest.resetAllMocks();
   r2.deleteUserObjects.mockResolvedValue(0);
-});
-
-describe('getAllUsers', () => {
-  test('hanya kolom id, username, email', async () => {
-    mockPrisma.user.findMany.mockResolvedValue([{ id: 1, username: 'a', email: 'a@t.loc' }]);
-
-    const users = await usersService.getAllUsers();
-
-    expect(mockPrisma.user.findMany).toHaveBeenCalledWith({ select: { id: true, username: true, email: true } });
-    expect(users[0]).toEqual({ id: 1, username: 'a', email: 'a@t.loc' });
-  });
 });
 
 describe('updateUser', () => {

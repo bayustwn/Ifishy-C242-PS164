@@ -18,6 +18,8 @@ const articlesService = require('../articles.service');
 
 const fakeBrowserFor = (evaluateResult) => {
   const fakePage = {
+    setRequestInterception: jest.fn().mockResolvedValue(),
+    on: jest.fn(),
     goto: jest.fn(),
     evaluate: jest.fn().mockResolvedValue(evaluateResult),
   };
@@ -77,6 +79,7 @@ describe('fetchAndSaveFromUrl', () => {
     const out = await articlesService.fetchAndSaveFromUrl('https://contoh.com/isi');
 
     expect(mockPuppeteerState.launch).toHaveBeenCalled();
+    expect(fakePage.setRequestInterception).toHaveBeenCalledWith(true);
     expect(fakePage.goto).toHaveBeenCalledWith('https://contoh.com/isi');
     expect(mockPrisma.article.create).toHaveBeenCalledWith({
       data: { title: 'T', content: 'C', author: 'A', coverImage: 'c.jpg', publishedAt: new Date('2024-05-01T08:00:00Z') },

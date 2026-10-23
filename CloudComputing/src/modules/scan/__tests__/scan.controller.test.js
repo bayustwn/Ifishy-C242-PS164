@@ -122,13 +122,14 @@ describe('getScanHistoryById', () => {
     expect(scanService.getScanHistoriesByUserId).not.toHaveBeenCalled();
   });
 
-  test('riwayat kosong → 404 "Scan history tidak ditemukan untuk user ini."', async () => {
+  test('riwayat kosong → 200 data []', async () => {
     scanService.getScanHistoriesByUserId.mockResolvedValue([]);
 
     const res = await call(controller.getScanHistoryById, { user: { id: 999 }, params: { userId: '999' } });
 
-    expect(res.statusCode).toBe(404);
-    expect(res.body.error.message).toBe('Scan history tidak ditemukan untuk user ini.');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toEqual([]);
+    expect(res.body.message).toBe('Scan history berhasil diambil!');
   });
 
   test('ada riwayat → 200 dengan data camelCase', async () => {

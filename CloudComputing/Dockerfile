@@ -12,8 +12,6 @@ RUN PUPPETEER_SKIP_DOWNLOAD=true npm ci --omit=dev
 
 COPY src ./src
 
-RUN mkdir -p uploads && chown -R node:node /usr/src/app
-
 ENV NODE_ENV=production
 EXPOSE 8080
 

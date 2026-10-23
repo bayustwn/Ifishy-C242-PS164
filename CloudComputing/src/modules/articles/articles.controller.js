@@ -2,6 +2,7 @@ const guard = require('../../shared/guard');
 const { parsePagination } = require('../../shared/pagination');
 const { ok, fail } = require('../../shared/response');
 const articlesService = require('./articles.service');
+const { assertPublicHttpUrl } = require('../../shared/urlSafety');
 const { scrapeParamsSchema } = require('./articles.schema');
 
 const getArticleById = guard('Error fetching article', 'Failed to fetch article', async (req, res) => {
@@ -25,8 +26,17 @@ const getArticleFromUrl = guard('Error scraping and saving article', 'Failed to 
   }
 
   let fullUrl = parsed.data.url;
-  if (!fullUrl.startsWith('http://') && !fullUrl.startsWith('https://')) {
+  if (!/^https?:\/\//i.test(fullUrl)) {
     fullUrl = 'https://' + fullUrl;
+  }
+
+  try {
+    fullUrl = (await assertPublicHttpUrl(fullUrl)).toString();
+  } catch (error) {
+    if (error.code === 'UNSAFE_URL') {
+      return fail(res, 400, 'VALIDATION_ERROR', 'URL must be a public http(s) address');
+    }
+    throw error;
   }
 
   const result = await articlesService.fetchAndSaveFromUrl(fullUrl);
