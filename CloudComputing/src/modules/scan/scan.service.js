@@ -1,4 +1,5 @@
 const prisma = require('../../shared/prisma');
+const { resolveMediaUrl } = require('../../shared/r2');
 const { sliceArgs } = require('../../shared/pagination');
 
 const saveScanHistory = async (userId, { fishImage, disease, confidence, description, treatment, validation }) => {
@@ -16,7 +17,7 @@ const saveScanHistory = async (userId, { fishImage, disease, confidence, descrip
   });
 
   return {
-    imageUrl: created.fishImage,
+    imageUrl: await resolveMediaUrl(created.fishImage),
     fishName: created.disease,
     accuracy: created.confidence,
   };
@@ -40,7 +41,12 @@ const getScanHistoriesByUserId = async (userId, opts = {}) => {
     orderBy: { scanTimestamp: 'desc' },
     ...sliceArgs(opts),
   });
-  return histories.map(toScanShape);
+  return Promise.all(
+    histories.map(async (history) => ({
+      ...toScanShape(history),
+      fishImage: await resolveMediaUrl(history.fishImage),
+    })),
+  );
 };
 
 module.exports = { saveScanHistory, getScanHistoriesByUserId };

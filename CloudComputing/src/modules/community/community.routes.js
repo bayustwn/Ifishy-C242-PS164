@@ -1,12 +1,11 @@
 const express = require('express');
 const { authenticateToken } = require('../../middleware/auth');
-const upload = require('../../middleware/upload');
 const { createPost, updatePost, getPosts, getPostById, addShareToPost, addComment, getComments, getCommentsById, addReplyToComment, addLikeToComment, removeLikeFromComment, getLikedCommentsByUser, addUpvoteToPost, addDownvoteToPost, getVoteStatusById, removeUpvoteFromPost, removeDownvoteFromPost } = require('./community.controller');
 
 const router = express.Router();
 
-router.post('/community/posts', authenticateToken, upload.single('image'), createPost);
-router.put('/community/posts/:postId', authenticateToken, upload.single('image'), updatePost);
+router.post('/community/posts', authenticateToken, createPost);
+router.put('/community/posts/:postId', authenticateToken, updatePost);
 router.get('/community/posts', authenticateToken, getPosts);
 router.get('/community/posts/:id', authenticateToken, getPostById);
 router.post('/community/posts/:postId/share', authenticateToken, addShareToPost);

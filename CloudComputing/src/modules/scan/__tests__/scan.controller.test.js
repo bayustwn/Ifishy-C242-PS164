@@ -26,15 +26,15 @@ const call = (handler, req) => {
 };
 
 const goodBody = {
-  userId: '3', disease: 'Argulus', confidence: '0.92',
+  imageKey: 'scans/3/a.jpg', disease: 'Argulus', confidence: '0.92',
   description: 'd', treatment: 't', validation: 'v',
 };
 
 beforeEach(() => jest.resetAllMocks());
 
 describe('saveScanHistory', () => {
-  test('file tidak ada → 400 "Semua data harus diisi!"', async () => {
-    const res = await call(controller.saveScanHistory, { body: goodBody });
+  test('imageKey tidak ada → 400 "Semua data harus diisi!"', async () => {
+    const res = await call(controller.saveScanHistory, { user: { id: 3 }, body: { ...goodBody, imageKey: undefined } });
     expect(res.statusCode).toBe(400);
     expect(res.body.error.message).toBe('Semua data harus diisi!');
     expect(scanService.saveScanHistory).not.toHaveBeenCalled();
@@ -42,7 +42,7 @@ describe('saveScanHistory', () => {
 
   test('confidence bukan angka → 400 pesan desimal', async () => {
     const res = await call(controller.saveScanHistory, {
-      file: { originalname: 'a.jpg', buffer: Buffer.from('x') },
+      user: { id: 3 },
       body: { ...goodBody, confidence: 'abc' },
     });
     expect(res.statusCode).toBe(400);
@@ -51,19 +51,27 @@ describe('saveScanHistory', () => {
 
   test('deskripsi >1000 → 400 pesan deskripsi (prioritas di bawah confidence)', async () => {
     const res = await call(controller.saveScanHistory, {
-      file: { originalname: 'a.jpg', buffer: Buffer.from('x') },
+      user: { id: 3 },
       body: { ...goodBody, description: 'x'.repeat(1001) },
     });
     expect(res.statusCode).toBe(400);
     expect(res.body.error.message).toBe('Deskripsi terlalu panjang (maksimal 1000 karakter).');
   });
 
-  test('valid → walik service → 201 dengan payload image', async () => {
+  test('imageKey milik user lain → 400', async () => {
+    const res = await call(controller.saveScanHistory, {
+      user: { id: 3 },
+      body: { ...goodBody, imageKey: 'scans/4/a.jpg' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(scanService.saveScanHistory).not.toHaveBeenCalled();
+  });
+
+  test('valid → panggil service → 201 dengan payload image', async () => {
     scanService.saveScanHistory.mockResolvedValue({ imageUrl: 'u', fishName: 'd', accuracy: 0.92 });
 
     const res = await call(controller.saveScanHistory, {
-      file: { originalname: 'a.jpg', buffer: Buffer.from('x') },
-      protocol: 'http', get: () => 'h', // untuk saveFileToDisk
+      user: { id: 3 },
       body: goodBody,
     });
 
@@ -71,7 +79,7 @@ describe('saveScanHistory', () => {
     expect(res.body.message).toBe('Riwayat scan berhasil disimpan!');
     expect(scanService.saveScanHistory).toHaveBeenCalledWith(
       3,
-      expect.objectContaining({ disease: 'Argulus', confidence: 0.92 })
+      expect.objectContaining({ disease: 'Argulus', confidence: 0.92, fishImage: 'scans/3/a.jpg' })
     );
   });
 });

@@ -3,21 +3,19 @@ const firstIssueMessage = require('../../shared/validation');
 const { parsePagination } = require('../../shared/pagination');
 const { ok, fail } = require('../../shared/response');
 const community = require('./community.service');
-const { saveFileToDisk, postFolder } = require('../../shared/storage');
+const r2 = require('../../shared/r2');
 const { postBodySchema, addCommentSchema, addReplySchema } = require('./community.schema');
 
 const isNumericId = (value) => /^\d+$/.test(String(value));
 
 const createPost = guard('Error in createPost', 'Failed to create post', async (req, res) => {
-  const { title, content } = postBodySchema.parse(req.body);
-  const file = req.file;
+  const { title, content, imageKey } = postBodySchema.parse(req.body);
 
-  let imageUrl = null;
-  if (file) {
-    imageUrl = await saveFileToDisk(req, file, postFolder);
+  if (imageKey && !r2.isOwnedKey(imageKey, 'post', req.user.id)) {
+    return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
   }
 
-  const postId = await community.createPost(req.user.id, { title, content }, imageUrl);
+  const postId = await community.createPost(req.user.id, { title, content }, imageKey ?? null);
 
   return ok(res, { postId }, 'Post created successfully!', 201);
 });
@@ -25,7 +23,6 @@ const createPost = guard('Error in createPost', 'Failed to create post', async (
 const updatePost = guard('Error in updatePost', 'Failed to update post', async (req, res) => {
   const { postId } = req.params;
   const { user } = req;
-  const file = req.file;
 
   if (!isNumericId(postId)) {
     return fail(res, 404, 'NOT_FOUND', 'Post not found or you do not have permission to edit this post');
@@ -37,12 +34,13 @@ const updatePost = guard('Error in updatePost', 'Failed to update post', async (
     return fail(res, 404, 'NOT_FOUND', 'Post not found or you do not have permission to edit this post');
   }
 
-  const { title, content } = postBodySchema.parse(req.body);
+  const { title, content, imageKey } = postBodySchema.parse(req.body);
 
-  let imageUrl = existingPost.imageUrl;
-  if (file) {
-    imageUrl = await saveFileToDisk(req, file, postFolder);
+  if (imageKey && !r2.isOwnedKey(imageKey, 'post', user.id)) {
+    return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
   }
+
+  const imageUrl = imageKey === undefined ? existingPost.imageUrl : (imageKey ?? null);
 
   await community.updatePost(Number(postId), user.id, { title, content }, imageUrl);
 

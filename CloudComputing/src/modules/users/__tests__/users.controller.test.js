@@ -8,13 +8,6 @@ jest.mock('../users.service', () => ({
   getProfileByEmail: jest.fn(),
 }));
 
-jest.mock('../../../shared/storage', () => ({
-  saveFileToDisk: jest.fn().mockResolvedValue('http://h/uploads/photo-profile-user/p.jpg'),
-  profileFolder: 'photo-profile-user',
-  postFolder: 'image-post',
-  scanHistoryFolder: 'scan-history',
-}));
-
 const { SignJWT } = require('jose');
 const usersService = require('../users.service');
 const controller = require('../users.controller');
@@ -110,27 +103,29 @@ describe('deleteUserAccount', () => {
 });
 
 describe('uploadProfilePhoto', () => {
-  test('file tidak ada → 400 "No file uploaded"', async () => {
-    const res = await call(controller.uploadProfilePhoto, { body: { userId: '1' } });
+  test('imageKey tidak ada → 400', async () => {
+    const res = await call(controller.uploadProfilePhoto, { user: { id: 7 }, body: { userId: '1' } });
     expect(res.statusCode).toBe(400);
-    expect(res.body.error.message).toBe('No file uploaded');
+    expect(res.body.error.message).toBe('imageKey is required');
   });
 
-  test('file + userId → 200 photoUrl', async () => {
-    const { saveFileToDisk } = require('../../../shared/storage');
-    saveFileToDisk.mockResolvedValue('http://h/uploads/photo-profile-user/p.jpg');
+  test('imageKey milik user lain → 400 tanpa update DB', async () => {
+    const res = await call(controller.uploadProfilePhoto, { user: { id: 7 }, body: { imageKey: 'avatars/8/p.jpg' } });
+    expect(res.statusCode).toBe(400);
+    expect(usersService.setProfilePhotoByUserId).not.toHaveBeenCalled();
+  });
+
+  test('imageKey valid → 200 photoUrl', async () => {
     usersService.setProfilePhotoByUserId.mockResolvedValue();
 
     const res = await call(controller.uploadProfilePhoto, {
-      file: { originalname: 'p.jpg', buffer: Buffer.from('x') },
-      protocol: 'http',
-      get: () => 'h',
-      body: { userId: '7' },
+      user: { id: 7 },
+      body: { imageKey: 'avatars/7/p.jpg' },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.data.photoUrl).toBe('http://h/uploads/photo-profile-user/p.jpg');
-    expect(usersService.setProfilePhotoByUserId).toHaveBeenCalledWith(7, 'http://h/uploads/photo-profile-user/p.jpg');
+    expect(res.body.data.photoUrl).toBe('avatars/7/p.jpg');
+    expect(usersService.setProfilePhotoByUserId).toHaveBeenCalledWith(7, 'avatars/7/p.jpg');
   });
 });
 

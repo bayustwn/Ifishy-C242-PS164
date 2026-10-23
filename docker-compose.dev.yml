@@ -37,6 +37,8 @@ services:
     restart: unless-stopped
     ports:
       - "9080:8080"
+    env_file:
+      - ./CloudComputing/.env
     environment:
       PORT: 8080
       JWT_SECRET: dev-secret-ifishy

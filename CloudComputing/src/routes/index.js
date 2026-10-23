@@ -4,6 +4,7 @@ const router = express.Router();
 
 // urutan mount mengikuti urutan registrasi router lama (perilaku identik)
 router.use(require('../modules/auth/auth.routes'));
+router.use(require('../modules/uploads/uploads.routes'));
 router.use(require('../modules/users/users.routes'));
 router.use(require('../modules/community/community.routes'));
 router.use(require('../modules/articles/articles.routes'));

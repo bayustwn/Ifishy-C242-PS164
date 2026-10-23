@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const prisma = require('../../shared/prisma');
+const { publicUrl } = require('../../shared/r2');
 const { sliceArgs } = require('../../shared/pagination');
 
 const publicColumns = { id: true, username: true, email: true };
@@ -11,7 +12,7 @@ const toProfileRow = ({ id, username, email, profilePhoto }) => ({
   id,
   username,
   email,
-  profile_photo: profilePhoto,
+  profile_photo: publicUrl(profilePhoto),
 });
 
 const updateUser = async (userId, { username, email, password, newPassword }) => {

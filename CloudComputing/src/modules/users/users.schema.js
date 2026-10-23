@@ -7,12 +7,14 @@ const updateUserSchema = z.object({
   newPassword: z.string().optional(),
 });
 
-const photoUserIdSchema = z.object({
-  userId: z.coerce.number().int().optional(),
+const photoKeySchema = z.object({
+  imageKey: z
+    .string({ required_error: 'imageKey is required', invalid_type_error: 'imageKey is required' })
+    .min(1, 'imageKey is required'),
 });
 
 const emailParamsSchema = z.object({
   email: z.string().optional(),
 });
 
-module.exports = { updateUserSchema, photoUserIdSchema, emailParamsSchema };
+module.exports = { updateUserSchema, photoKeySchema, emailParamsSchema };

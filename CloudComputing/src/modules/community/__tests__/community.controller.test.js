@@ -1,16 +1,13 @@
-// unit test community.controller — service & storage dimock, fokus mapping status/message wire
+// unit test community.controller — service dimock, fokus mapping status/message wire
 jest.mock('../community.service');
-jest.mock('../../../shared/storage', () => ({
-  saveFileToDisk: jest.fn().mockResolvedValue('uploads/posts/f.png'),
-  postFolder: 'posts',
-}));
 
 const service = require('../community.service');
 const controller = require('../community.controller');
-const { saveFileToDisk } = require('../../../shared/storage');
 
 const makeRes = () => ({ status: jest.fn().mockReturnThis(), json: jest.fn() });
 const req = (overrides = {}) => ({ user: { id: 9 }, params: {}, body: {}, file: undefined, ...overrides });
+
+beforeEach(() => jest.resetAllMocks());
 
 describe('community.controller', () => {
   test('createPost: 201 dengan postId dan imageUrl null ketika tanpa file', async () => {
@@ -24,15 +21,22 @@ describe('community.controller', () => {
     expect(service.createPost).toHaveBeenCalledWith(9, { title: 'T', content: 'C' }, null);
   });
 
-  test('createPost: dengan file → saveFileToDisk(postFolder) dan imageUrl diteruskan', async () => {
+  test('createPost: dengan imageKey valid → key diteruskan', async () => {
     service.createPost.mockResolvedValue(1);
     const res = makeRes();
-    const file = { originalname: 'a.png', buffer: Buffer.from('x') };
 
-    await controller.createPost(req({ body: { title: 'T', content: 'C' }, file }), res);
+    await controller.createPost(req({ body: { title: 'T', content: 'C', imageKey: 'posts/9/f.png' } }), res);
 
-    expect(saveFileToDisk).toHaveBeenCalledWith(expect.objectContaining({ file }), file, 'posts');
-    expect(service.createPost).toHaveBeenLastCalledWith(9, { title: 'T', content: 'C' }, 'uploads/posts/f.png');
+    expect(service.createPost).toHaveBeenLastCalledWith(9, { title: 'T', content: 'C' }, 'posts/9/f.png');
+  });
+
+  test('createPost: imageKey milik user lain → 400 tanpa memanggil service', async () => {
+    const res = makeRes();
+
+    await controller.createPost(req({ body: { title: 'T', content: 'C', imageKey: 'posts/8/f.png' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(service.createPost).not.toHaveBeenCalled();
   });
 
   test('createPost: service gagal → 500 Failed to create post', async () => {
@@ -71,15 +75,27 @@ describe('community.controller', () => {
     expect(res.json).toHaveBeenCalledWith({ success: true, data: null, message: 'Post updated successfully!' });
   });
 
-  test('updatePost: file baru mengganti imageUrl', async () => {
+  test('updatePost: imageKey baru mengganti imageUrl', async () => {
     service.findPostByIdAndUser.mockResolvedValue({ imageUrl: 'old.png' });
     service.updatePost.mockResolvedValue('ok');
     const res = makeRes();
-    const file = { originalname: 'b.png', buffer: Buffer.from('y') };
 
-    await controller.updatePost(req({ params: { postId: '5' }, body: { title: 'T', content: 'C' }, file }), res);
+    await controller.updatePost(
+      req({ params: { postId: '5' }, body: { title: 'T', content: 'C', imageKey: 'posts/9/new.png' } }),
+      res,
+    );
 
-    expect(service.updatePost).toHaveBeenCalledWith(5, 9, { title: 'T', content: 'C' }, 'uploads/posts/f.png');
+    expect(service.updatePost).toHaveBeenCalledWith(5, 9, { title: 'T', content: 'C' }, 'posts/9/new.png');
+  });
+
+  test('updatePost: imageKey null menghapus gambar', async () => {
+    service.findPostByIdAndUser.mockResolvedValue({ imageUrl: 'old.png' });
+    service.updatePost.mockResolvedValue('ok');
+    const res = makeRes();
+
+    await controller.updatePost(req({ params: { postId: '5' }, body: { title: 'T', content: 'C', imageKey: null } }), res);
+
+    expect(service.updatePost).toHaveBeenCalledWith(5, 9, { title: 'T', content: 'C' }, null);
   });
 
   test('getPosts dan error path', async () => {

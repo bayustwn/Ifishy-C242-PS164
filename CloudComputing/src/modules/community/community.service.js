@@ -1,5 +1,6 @@
 const prisma = require('../../shared/prisma');
 const logger = require('../../shared/logger');
+const { publicUrl } = require('../../shared/r2');
 const { sliceArgs } = require('../../shared/pagination');
 
 const minutesAgo = (createdAt) => {
@@ -15,7 +16,7 @@ const profilePictures = async (userIds) => {
       select: { id: true, profilePhoto: true },
     });
     const pictureMap = new Map();
-    for (const row of rows) pictureMap.set(row.id, row.profilePhoto || '');
+    for (const row of rows) pictureMap.set(row.id, publicUrl(row.profilePhoto) || '');
     return pictureMap;
   } catch (error) {
     logger.error({ err: error }, 'Error getting profile pictures from database');
@@ -55,7 +56,7 @@ const toPostCore = (p) => ({
   id: p.id,
   title: p.title,
   content: p.content,
-  image_url: p.imageUrl,
+  image_url: publicUrl(p.imageUrl),
   created_at: p.createdAt,
   user_id: p.userId,
   username: p.user.username,

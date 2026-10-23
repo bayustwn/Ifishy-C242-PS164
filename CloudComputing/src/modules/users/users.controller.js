@@ -1,10 +1,11 @@
 const guard = require('../../shared/guard');
+const firstIssueMessage = require('../../shared/validation');
 const { parsePagination } = require('../../shared/pagination');
 const { verifyToken } = require('../../shared/token');
 const { ok, fail } = require('../../shared/response');
+const r2 = require('../../shared/r2');
 const usersService = require('./users.service');
-const { updateUserSchema, photoUserIdSchema, emailParamsSchema } = require('./users.schema');
-const { saveFileToDisk, profileFolder } = require('../../shared/storage');
+const { updateUserSchema, photoKeySchema, emailParamsSchema } = require('./users.schema');
 
 const getUserIdFromToken = async (token) => (await verifyToken(token)).id;
 
@@ -56,32 +57,37 @@ const deleteUserAccount = guard('Error in deleteUserAccount', 'Failed to delete 
 });
 
 const uploadProfilePhoto = guard('Error in uploadProfilePhoto', 'Failed to upload profile photo', async (req, res) => {
-  const parsed = photoUserIdSchema.safeParse(req.body ?? {});
+  const parsed = photoKeySchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return fail(res, 400, 'UPLOAD_ERROR', 'No file uploaded');
+    return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
   }
 
-  const file = req.file;
-  if (!file) {
-    return fail(res, 400, 'UPLOAD_ERROR', 'No file uploaded');
+  const { imageKey } = parsed.data;
+  if (!r2.isOwnedKey(imageKey, 'avatar', req.user.id)) {
+    return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
   }
 
-  const publicUrl = await saveFileToDisk(req, file, profileFolder);
-  await usersService.setProfilePhotoByUserId(parsed.data.userId, publicUrl);
+  await usersService.setProfilePhotoByUserId(req.user.id, imageKey);
+  const photoUrl = await r2.resolveMediaUrl(imageKey);
 
-  return ok(res, { photoUrl: publicUrl }, 'Profile photo uploaded successfully!');
+  return ok(res, { photoUrl }, 'Profile photo uploaded successfully!');
 });
 
 const updatePhotoProfile = guard('Error in updatePhotoProfile', 'Failed to update profile photo', async (req, res) => {
-  const file = req.file;
-  if (!file) {
-    return fail(res, 400, 'UPLOAD_ERROR', 'No file uploaded');
+  const parsed = photoKeySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
   }
 
-  const newImageUrl = await saveFileToDisk(req, file, profileFolder);
-  await usersService.setProfilePhotoByUserId(req.user.id, newImageUrl);
+  const { imageKey } = parsed.data;
+  if (!r2.isOwnedKey(imageKey, 'avatar', req.user.id)) {
+    return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
+  }
 
-  return ok(res, { imageUrl: newImageUrl }, 'Profile photo updated successfully!');
+  await usersService.setProfilePhotoByUserId(req.user.id, imageKey);
+  const imageUrl = await r2.resolveMediaUrl(imageKey);
+
+  return ok(res, { imageUrl }, 'Profile photo updated successfully!');
 });
 
 const getDashboardData = guard('Error in getDashboardData', 'Failed to retrieve dashboard data', async (req, res) => {

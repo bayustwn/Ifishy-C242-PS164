@@ -3,6 +3,7 @@ const { z } = require('zod');
 const postBodySchema = z.object({
   title: z.string().optional(),
   content: z.string().optional(),
+  imageKey: z.string().max(500).nullish(),
 });
 
 const addCommentSchema = z.object({

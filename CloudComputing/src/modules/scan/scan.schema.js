@@ -1,10 +1,9 @@
 const { z } = require('zod');
 
 const saveScanSchema = z.object({
-  userId: z.coerce
-    .number({ message: 'Semua data harus diisi!' })
-    .int()
-    .positive({ message: 'Semua data harus diisi!' }),
+  imageKey: z
+    .string({ message: 'Semua data harus diisi!' })
+    .min(1, 'Semua data harus diisi!'),
   disease: z
     .string({ message: 'Semua data harus diisi!' })
     .min(1, 'Semua data harus diisi!'),
