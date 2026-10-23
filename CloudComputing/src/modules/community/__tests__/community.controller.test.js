@@ -1,13 +1,23 @@
 // unit test community.controller — service dimock, fokus mapping status/message wire
 jest.mock('../community.service');
 
+jest.mock('../../../shared/r2', () => {
+  const actual = jest.requireActual('../../../shared/r2');
+  return { ...actual, verifyUpload: jest.fn(), deleteOwned: jest.fn() };
+});
+
+const r2 = require('../../../shared/r2');
 const service = require('../community.service');
 const controller = require('../community.controller');
 
 const makeRes = () => ({ status: jest.fn().mockReturnThis(), json: jest.fn() });
 const req = (overrides = {}) => ({ user: { id: 9 }, params: {}, body: {}, file: undefined, ...overrides });
 
-beforeEach(() => jest.resetAllMocks());
+beforeEach(() => {
+  jest.resetAllMocks();
+  r2.verifyUpload.mockResolvedValue({});
+  r2.deleteOwned.mockResolvedValue(true);
+});
 
 describe('community.controller', () => {
   test('createPost: 201 dengan postId dan imageUrl null ketika tanpa file', async () => {
@@ -36,6 +46,17 @@ describe('community.controller', () => {
     await controller.createPost(req({ body: { title: 'T', content: 'C', imageKey: 'posts/8/f.png' } }), res);
 
     expect(res.status).toHaveBeenCalledWith(400);
+    expect(service.createPost).not.toHaveBeenCalled();
+  });
+
+  test('createPost: imageKey valid tapi objek tidak ada → 400 tanpa memanggil service', async () => {
+    r2.verifyUpload.mockRejectedValue(new Error('not found'));
+    const res = makeRes();
+
+    await controller.createPost(req({ body: { title: 'T', content: 'C', imageKey: 'posts/9/f.png' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Upload not found or invalid' } });
     expect(service.createPost).not.toHaveBeenCalled();
   });
 
@@ -96,6 +117,20 @@ describe('community.controller', () => {
     await controller.updatePost(req({ params: { postId: '5' }, body: { title: 'T', content: 'C', imageKey: null } }), res);
 
     expect(service.updatePost).toHaveBeenCalledWith(5, 9, { title: 'T', content: 'C' }, null);
+  });
+
+  test('updatePost: gambar R2 lama dihapus setelah update berhasil', async () => {
+    service.findPostByIdAndUser.mockResolvedValue({ imageUrl: 'posts/9/old.png' });
+    service.updatePost.mockResolvedValue('ok');
+    const res = makeRes();
+
+    await controller.updatePost(
+      req({ params: { postId: '5' }, body: { title: 'T', content: 'C', imageKey: 'posts/9/new.png' } }),
+      res,
+    );
+
+    expect(r2.deleteOwned).toHaveBeenCalledWith('posts/9/old.png', 'post', 9);
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 
   test('getPosts dan error path', async () => {

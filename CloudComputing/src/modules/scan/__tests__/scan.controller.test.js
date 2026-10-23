@@ -4,6 +4,12 @@ jest.mock('../scan.service', () => ({
   getScanHistoriesByUserId: jest.fn(),
 }));
 
+jest.mock('../../../shared/r2', () => {
+  const actual = jest.requireActual('../../../shared/r2');
+  return { ...actual, verifyUpload: jest.fn() };
+});
+
+const r2 = require('../../../shared/r2');
 const scanService = require('../scan.service');
 const controller = require('../scan.controller');
 
@@ -30,7 +36,10 @@ const goodBody = {
   description: 'd', treatment: 't', validation: 'v',
 };
 
-beforeEach(() => jest.resetAllMocks());
+beforeEach(() => {
+  jest.resetAllMocks();
+  r2.verifyUpload.mockResolvedValue({});
+});
 
 describe('saveScanHistory', () => {
   test('imageKey tidak ada → 400 "Semua data harus diisi!"', async () => {
@@ -67,6 +76,19 @@ describe('saveScanHistory', () => {
     expect(scanService.saveScanHistory).not.toHaveBeenCalled();
   });
 
+  test('upload tidak ada/tidak valid → 400 tanpa simpan', async () => {
+    r2.verifyUpload.mockRejectedValue(new Error('not found'));
+
+    const res = await call(controller.saveScanHistory, {
+      user: { id: 3 },
+      body: goodBody,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toBe('Upload not found or invalid');
+    expect(scanService.saveScanHistory).not.toHaveBeenCalled();
+  });
+
   test('valid → panggil service → 201 dengan payload image', async () => {
     scanService.saveScanHistory.mockResolvedValue({ imageUrl: 'u', fishName: 'd', accuracy: 0.92 });
 
@@ -86,16 +108,24 @@ describe('saveScanHistory', () => {
 
 describe('getScanHistoryById', () => {
   test('userId kosong → 400 "User ID diperlukan!"', async () => {
-    const res = await call(controller.getScanHistoryById, { params: {} });
+    const res = await call(controller.getScanHistoryById, { user: { id: 3 }, params: {} });
     expect(res.statusCode).toBe(400);
     expect(res.body.error.message).toBe('User ID diperlukan!');
+    expect(scanService.getScanHistoriesByUserId).not.toHaveBeenCalled();
+  });
+
+  test('userId user lain → 403 tanpa query', async () => {
+    const res = await call(controller.getScanHistoryById, { user: { id: 3 }, params: { userId: '4' } });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
     expect(scanService.getScanHistoriesByUserId).not.toHaveBeenCalled();
   });
 
   test('riwayat kosong → 404 "Scan history tidak ditemukan untuk user ini."', async () => {
     scanService.getScanHistoriesByUserId.mockResolvedValue([]);
 
-    const res = await call(controller.getScanHistoryById, { params: { userId: '999' } });
+    const res = await call(controller.getScanHistoryById, { user: { id: 999 }, params: { userId: '999' } });
 
     expect(res.statusCode).toBe(404);
     expect(res.body.error.message).toBe('Scan history tidak ditemukan untuk user ini.');
@@ -104,7 +134,7 @@ describe('getScanHistoryById', () => {
   test('ada riwayat → 200 dengan data camelCase', async () => {
     scanService.getScanHistoriesByUserId.mockResolvedValue([{ id: 2, confidence: 0.88 }]);
 
-    const res = await call(controller.getScanHistoryById, { params: { userId: '3' } });
+    const res = await call(controller.getScanHistoryById, { user: { id: 3 }, params: { userId: '3' } });
 
     expect(res.statusCode).toBe(200);
     expect(res.body.message).toBe('Scan history berhasil diambil!');

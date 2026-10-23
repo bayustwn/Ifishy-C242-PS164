@@ -3,6 +3,7 @@ const firstIssueMessage = require('../../shared/validation');
 const { parsePagination } = require('../../shared/pagination');
 const { ok, fail } = require('../../shared/response');
 const community = require('./community.service');
+const logger = require('../../shared/logger');
 const r2 = require('../../shared/r2');
 const { postBodySchema, addCommentSchema, addReplySchema } = require('./community.schema');
 
@@ -11,8 +12,15 @@ const isNumericId = (value) => /^\d+$/.test(String(value));
 const createPost = guard('Error in createPost', 'Failed to create post', async (req, res) => {
   const { title, content, imageKey } = postBodySchema.parse(req.body);
 
-  if (imageKey && !r2.isOwnedKey(imageKey, 'post', req.user.id)) {
-    return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
+  if (imageKey) {
+    if (!r2.isOwnedKey(imageKey, 'post', req.user.id)) {
+      return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
+    }
+    try {
+      await r2.verifyUpload(imageKey);
+    } catch {
+      return fail(res, 400, 'VALIDATION_ERROR', 'Upload not found or invalid');
+    }
   }
 
   const postId = await community.createPost(req.user.id, { title, content }, imageKey ?? null);
@@ -36,13 +44,26 @@ const updatePost = guard('Error in updatePost', 'Failed to update post', async (
 
   const { title, content, imageKey } = postBodySchema.parse(req.body);
 
-  if (imageKey && !r2.isOwnedKey(imageKey, 'post', user.id)) {
-    return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
+  if (imageKey) {
+    if (!r2.isOwnedKey(imageKey, 'post', user.id)) {
+      return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
+    }
+    try {
+      await r2.verifyUpload(imageKey);
+    } catch {
+      return fail(res, 400, 'VALIDATION_ERROR', 'Upload not found or invalid');
+    }
   }
 
   const imageUrl = imageKey === undefined ? existingPost.imageUrl : (imageKey ?? null);
 
   await community.updatePost(Number(postId), user.id, { title, content }, imageUrl);
+
+  if (existingPost.imageUrl && existingPost.imageUrl !== imageUrl) {
+    await r2.deleteOwned(existingPost.imageUrl, 'post', user.id).catch((error) => {
+      logger.warn({ err: error, key: existingPost.imageUrl }, 'Failed to delete replaced post image');
+    });
+  }
 
   return ok(res, null, 'Post updated successfully!');
 });

@@ -12,11 +12,19 @@ const mockPrisma = {
 
 jest.mock('@prisma/client', () => ({ PrismaClient: jest.fn(() => mockPrisma) }));
 jest.mock('bcrypt', () => ({ hash: jest.fn(), compare: jest.fn() }));
+jest.mock('../../../shared/r2', () => {
+  const actual = jest.requireActual('../../../shared/r2');
+  return { ...actual, deleteUserObjects: jest.fn() };
+});
 
 const bcrypt = require('bcrypt');
+const r2 = require('../../../shared/r2');
 const usersService = require('../users.service');
 
-beforeEach(() => jest.resetAllMocks());
+beforeEach(() => {
+  jest.resetAllMocks();
+  r2.deleteUserObjects.mockResolvedValue(0);
+});
 
 describe('getAllUsers', () => {
   test('hanya kolom id, username, email', async () => {
@@ -84,24 +92,42 @@ describe('updateUser', () => {
 });
 
 describe('deleteUserAccount', () => {
-  test('row hilang → "not_found"; row ada → "ok"', async () => {
+  test('row hilang → "not_found" tanpa cleanup storage; row ada → "ok" + cleanup', async () => {
     mockPrisma.user.deleteMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
 
     expect(await usersService.deleteUserAccount(999)).toBe('not_found');
+    expect(r2.deleteUserObjects).not.toHaveBeenCalled();
+
     expect(await usersService.deleteUserAccount(5)).toBe('ok');
     expect(mockPrisma.user.deleteMany).toHaveBeenCalledWith({ where: { id: 5 } });
+    expect(r2.deleteUserObjects).toHaveBeenCalledWith(5);
+  });
+
+  test('cleanup storage gagal → tetap "ok"', async () => {
+    mockPrisma.user.deleteMany.mockResolvedValue({ count: 1 });
+    r2.deleteUserObjects.mockRejectedValue(new Error('r2 down'));
+
+    expect(await usersService.deleteUserAccount(5)).toBe('ok');
   });
 });
 
-describe('setProfilePhotoByUserId', () => {
-  test('userId valid → updateMany profilePhoto', async () => {
-    await usersService.setProfilePhotoByUserId(7, 'http://x/p.jpg');
-    expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 7 }, data: { profilePhoto: 'http://x/p.jpg' } });
+describe('replaceProfilePhoto', () => {
+  test('user tidak ada → null tanpa update', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(null);
+
+    expect(await usersService.replaceProfilePhoto(7, 'avatars/7/a.jpg')).toBeNull();
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
   });
 
-  test('userId tidak ada → tetap 200-able (sentinel -1, tanpa throw)', async () => {
-    await usersService.setProfilePhotoByUserId(undefined, 'http://x/p.jpg');
-    expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({ where: { id: -1 }, data: { profilePhoto: 'http://x/p.jpg' } });
+  test('user ada → simpan key baru dan kembalikan foto lama', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ profilePhoto: 'avatars/7/old.jpg' });
+    mockPrisma.user.update.mockResolvedValue({});
+
+    expect(await usersService.replaceProfilePhoto(7, 'avatars/7/new.jpg')).toBe('avatars/7/old.jpg');
+    expect(mockPrisma.user.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: { profilePhoto: 'avatars/7/new.jpg' },
+    });
   });
 });
 

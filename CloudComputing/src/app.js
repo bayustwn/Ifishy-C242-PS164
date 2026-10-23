@@ -1,4 +1,3 @@
-const path = require('path');
 const cors = require('cors');
 const express = require('express');
 const helmet = require('helmet');
@@ -27,7 +26,6 @@ app.use(pinoHttp({ logger }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 app.use(['/api/auth', '/api'], limit(globalLimiter, 'Too many requests, please try again later'), routes);
 

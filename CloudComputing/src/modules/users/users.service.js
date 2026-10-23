@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const prisma = require('../../shared/prisma');
-const { publicUrl } = require('../../shared/r2');
+const logger = require('../../shared/logger');
+const { publicUrl, deleteUserObjects } = require('../../shared/r2');
 const { sliceArgs } = require('../../shared/pagination');
 
 const publicColumns = { id: true, username: true, email: true };
@@ -42,12 +43,24 @@ const updateUser = async (userId, { username, email, password, newPassword }) =>
 const deleteUserAccount = async (userId) => {
   const result = await prisma.user.deleteMany({ where: { id: userId } });
   if (result.count === 0) return 'not_found';
+
+  await deleteUserObjects(userId).catch((error) => {
+    logger.warn({ err: error, userId }, 'Failed to delete user objects from storage');
+  });
+
   return 'ok';
 };
 
-const setProfilePhotoByUserId = async (userId, photoUrl) => {
+const replaceProfilePhoto = async (userId, photoUrl) => {
   const targetId = Number.isInteger(userId) ? userId : -1;
-  await prisma.user.updateMany({ where: { id: targetId }, data: { profilePhoto: photoUrl } });
+  const user = await prisma.user.findUnique({
+    where: { id: targetId },
+    select: { profilePhoto: true },
+  });
+  if (!user) return null;
+
+  await prisma.user.update({ where: { id: targetId }, data: { profilePhoto: photoUrl } });
+  return user.profilePhoto;
 };
 
 const getDashboardByEmail = async (email) => {
@@ -60,4 +73,4 @@ const getDashboardByEmail = async (email) => {
 
 const getProfileByEmail = getDashboardByEmail;
 
-module.exports = { getAllUsers, updateUser, deleteUserAccount, setProfilePhotoByUserId, getDashboardByEmail, getProfileByEmail };
+module.exports = { getAllUsers, updateUser, deleteUserAccount, replaceProfilePhoto, getDashboardByEmail, getProfileByEmail };

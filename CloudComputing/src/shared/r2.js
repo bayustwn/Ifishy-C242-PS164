@@ -2,8 +2,11 @@ const { randomUUID } = require('crypto');
 const {
   S3Client,
   PutObjectCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
@@ -32,6 +35,22 @@ const EXTENSIONS = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
+};
+
+const startsWithBytes = (bytes, expected) =>
+  bytes.length >= expected.length && expected.every((value, index) => bytes[index] === value);
+
+const hasValidSignature = (bytes, contentType) => {
+  const data = Buffer.from(bytes);
+  if (contentType === 'image/jpeg') return startsWithBytes(data, [0xFF, 0xD8, 0xFF]);
+  if (contentType === 'image/png') {
+    return startsWithBytes(data, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+  }
+  if (contentType === 'image/webp') {
+    return data.length >= 12 && data.toString('latin1', 0, 4) === 'RIFF'
+      && data.toString('latin1', 8, 12) === 'WEBP';
+  }
+  return false;
 };
 
 let client = null;
@@ -140,7 +159,75 @@ const verifyUpload = async (key) => {
       { code: 'INVALID_UPLOAD' },
     );
   }
+
+  const object = await getClient().send(
+    new GetObjectCommand({ Bucket: required('R2_BUCKET_PUBLIC'), Key: key, Range: 'bytes=0-11' }),
+  );
+  const bytes = await object.Body.transformToByteArray();
+  if (!hasValidSignature(bytes, contentType)) {
+    await deleteObject(key).catch(() => {});
+    throw Object.assign(
+      new Error('Uploaded file does not match the allowed type or size'),
+      { code: 'INVALID_UPLOAD' },
+    );
+  }
+
   return { ...parsed, size, contentType };
+};
+
+const uploadObject = async ({ key, body, contentType, cacheControl }) => {
+  if (!parseKey(key)) throw new Error('Invalid upload key');
+  await getClient().send(
+    new PutObjectCommand({
+      Bucket: required('R2_BUCKET_PUBLIC'),
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+      ...(cacheControl ? { CacheControl: cacheControl } : {}),
+    }),
+  );
+  return key;
+};
+
+const deleteOwned = async (key, purpose, userId) => {
+  if (!isOwnedKey(key, purpose, userId)) return false;
+  await deleteObject(key);
+  return true;
+};
+
+const deletePrefix = async (prefix) => {
+  const bucket = required('R2_BUCKET_PUBLIC');
+  let continuationToken;
+  let deleted = 0;
+
+  do {
+    const listed = await getClient().send(
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: continuationToken }),
+    );
+    const keys = (listed.Contents || []).map((entry) => entry.Key).filter(Boolean);
+    for (let start = 0; start < keys.length; start += 1000) {
+      await getClient().send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: keys.slice(start, start + 1000).map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+    }
+    deleted += keys.length;
+    continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return deleted;
+};
+
+const deleteUserObjects = async (userId) => {
+  const id = Number(userId);
+  if (!Number.isInteger(id) || id <= 0) return 0;
+  let deleted = 0;
+  for (const prefix of ['avatars', 'posts', 'scans']) {
+    deleted += await deletePrefix(`${prefix}/${id}/`);
+  }
+  return deleted;
 };
 
 const resolveMediaUrl = (value) => {
@@ -159,6 +246,10 @@ module.exports = {
   publicUrl,
   presignUpload,
   verifyUpload,
+  uploadObject,
   deleteObject,
+  deleteOwned,
+  deleteUserObjects,
+  hasValidSignature,
   resolveMediaUrl,
 };

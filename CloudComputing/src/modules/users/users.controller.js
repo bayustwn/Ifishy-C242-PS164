@@ -3,11 +3,33 @@ const firstIssueMessage = require('../../shared/validation');
 const { parsePagination } = require('../../shared/pagination');
 const { verifyToken } = require('../../shared/token');
 const { ok, fail } = require('../../shared/response');
+const logger = require('../../shared/logger');
 const r2 = require('../../shared/r2');
 const usersService = require('./users.service');
 const { updateUserSchema, photoKeySchema, emailParamsSchema } = require('./users.schema');
 
 const getUserIdFromToken = async (token) => (await verifyToken(token)).id;
+
+const replacePhoto = async (userId, imageKey) => {
+  if (!r2.isOwnedKey(imageKey, 'avatar', userId)) {
+    return { error: 'Invalid imageKey' };
+  }
+
+  try {
+    await r2.verifyUpload(imageKey);
+  } catch {
+    return { error: 'Upload not found or invalid' };
+  }
+
+  const previous = await usersService.replaceProfilePhoto(userId, imageKey);
+  if (previous && previous !== imageKey) {
+    await r2.deleteOwned(previous, 'avatar', userId).catch((err) => {
+      logger.warn({ err, key: previous }, 'Failed to delete replaced profile photo');
+    });
+  }
+
+  return { url: r2.resolveMediaUrl(imageKey) };
+};
 
 const getAllUsers = guard('Error fetching users', 'Failed to fetch users', async (req, res) => {
   const users = await usersService.getAllUsers(parsePagination(req.query));
@@ -62,15 +84,12 @@ const uploadProfilePhoto = guard('Error in uploadProfilePhoto', 'Failed to uploa
     return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
   }
 
-  const { imageKey } = parsed.data;
-  if (!r2.isOwnedKey(imageKey, 'avatar', req.user.id)) {
-    return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
+  const result = await replacePhoto(req.user.id, parsed.data.imageKey);
+  if (result.error) {
+    return fail(res, 400, 'VALIDATION_ERROR', result.error);
   }
 
-  await usersService.setProfilePhotoByUserId(req.user.id, imageKey);
-  const photoUrl = await r2.resolveMediaUrl(imageKey);
-
-  return ok(res, { photoUrl }, 'Profile photo uploaded successfully!');
+  return ok(res, { photoUrl: result.url }, 'Profile photo uploaded successfully!');
 });
 
 const updatePhotoProfile = guard('Error in updatePhotoProfile', 'Failed to update profile photo', async (req, res) => {
@@ -79,15 +98,12 @@ const updatePhotoProfile = guard('Error in updatePhotoProfile', 'Failed to updat
     return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
   }
 
-  const { imageKey } = parsed.data;
-  if (!r2.isOwnedKey(imageKey, 'avatar', req.user.id)) {
-    return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
+  const result = await replacePhoto(req.user.id, parsed.data.imageKey);
+  if (result.error) {
+    return fail(res, 400, 'VALIDATION_ERROR', result.error);
   }
 
-  await usersService.setProfilePhotoByUserId(req.user.id, imageKey);
-  const imageUrl = await r2.resolveMediaUrl(imageKey);
-
-  return ok(res, { imageUrl }, 'Profile photo updated successfully!');
+  return ok(res, { imageUrl: result.url }, 'Profile photo updated successfully!');
 });
 
 const getDashboardData = guard('Error in getDashboardData', 'Failed to retrieve dashboard data', async (req, res) => {

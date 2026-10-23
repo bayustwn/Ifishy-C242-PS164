@@ -16,6 +16,12 @@ const saveScanHistory = guard('Error saat menyimpan scan history', 'Terjadi kesa
     return fail(res, 400, 'VALIDATION_ERROR', 'Invalid imageKey');
   }
 
+  try {
+    await r2.verifyUpload(parsed.data.imageKey);
+  } catch {
+    return fail(res, 400, 'VALIDATION_ERROR', 'Upload not found or invalid');
+  }
+
   const data = await scanService.saveScanHistory(req.user.id, {
     fishImage: parsed.data.imageKey,
     disease: parsed.data.disease,
@@ -32,6 +38,10 @@ const getScanHistoryById = guard('Error saat mengambil scan history', 'Gagal men
   const parsed = scanUserIdSchema.safeParse(req.params);
   if (!parsed.success) {
     return fail(res, 400, 'VALIDATION_ERROR', 'User ID diperlukan!');
+  }
+
+  if (Number(parsed.data.userId) !== Number(req.user.id)) {
+    return fail(res, 403, 'FORBIDDEN', 'You can only view your own scan history');
   }
 
   const histories = await scanService.getScanHistoriesByUserId(
