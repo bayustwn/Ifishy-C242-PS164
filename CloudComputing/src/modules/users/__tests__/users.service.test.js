@@ -89,6 +89,13 @@ describe('updateUser', () => {
 
     expect(await usersService.updateUser(5, { newPassword: 'baru' })).toBe('incorrect_password');
   });
+
+  test('username/email duplikat → "conflict"', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(current);
+    mockPrisma.user.update.mockRejectedValue(Object.assign(new Error('duplicate'), { code: 'P2002' }));
+
+    expect(await usersService.updateUser(5, { username: 'dipakai' })).toBe('conflict');
+  });
 });
 
 describe('deleteUserAccount', () => {

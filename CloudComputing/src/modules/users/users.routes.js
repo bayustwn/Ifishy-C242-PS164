@@ -5,8 +5,8 @@ const { getAllUsers, updateUser, deleteUserAccount, uploadProfilePhoto, updatePh
 const router = express.Router();
 
 router.get('/users', getAllUsers);
-router.put('/update', updateUser);
-router.delete('/delete', deleteUserAccount);
+router.put('/update', authenticateToken, updateUser);
+router.delete('/delete', authenticateToken, deleteUserAccount);
 router.post('/upload-photo', authenticateToken, uploadProfilePhoto);
 router.put('/update-photo-profile', authenticateToken, updatePhotoProfile);
 router.get('/dashboard/:email', authenticateToken, getDashboardData);

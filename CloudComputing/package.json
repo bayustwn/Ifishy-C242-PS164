@@ -12,6 +12,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "storage:backfill": "node scripts/backfill-r2.js",
+    "storage:cleanup": "node scripts/cleanup-orphans.js",
     "test": "jest",
     "lint": "eslint src",
     "test:cov": "jest --coverage"

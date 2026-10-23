@@ -2,6 +2,7 @@ const guard = require('../../shared/guard');
 const firstIssueMessage = require('../../shared/validation');
 const { ok, fail } = require('../../shared/response');
 const r2 = require('../../shared/r2');
+const uploadsService = require('./uploads.service');
 const { presignSchema, keyBodySchema } = require('./uploads.schema');
 
 const isUploadNotFound = (error) =>
@@ -70,6 +71,11 @@ const deleteUpload = guard('Error deleting upload', 'Failed to delete upload', a
   }
   if (info.userId !== Number(req.user.id)) {
     return fail(res, 403, 'FORBIDDEN', 'Upload does not belong to this user');
+  }
+
+  const usage = await uploadsService.findUsage(parsed.data.key);
+  if (usage) {
+    return fail(res, 409, 'CONFLICT', `Upload is still used by ${usage}`);
   }
 
   try {

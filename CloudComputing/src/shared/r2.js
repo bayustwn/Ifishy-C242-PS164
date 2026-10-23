@@ -195,6 +195,47 @@ const deleteOwned = async (key, purpose, userId) => {
   return true;
 };
 
+const listObjects = async (prefix) => {
+  const bucket = required('R2_BUCKET_PUBLIC');
+  const objects = [];
+  let continuationToken;
+
+  do {
+    const listed = await getClient().send(
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: continuationToken }),
+    );
+    for (const entry of listed.Contents || []) {
+      if (entry.Key) {
+        objects.push({
+          key: entry.Key,
+          size: Number(entry.Size ?? 0),
+          lastModified: entry.LastModified,
+        });
+      }
+    }
+    continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return objects;
+};
+
+const deleteKeys = async (keys) => {
+  const bucket = required('R2_BUCKET_PUBLIC');
+  let deleted = 0;
+  for (let start = 0; start < keys.length; start += 1000) {
+    const batch = keys.slice(start, start + 1000);
+    if (!batch.length) continue;
+    await getClient().send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+    deleted += batch.length;
+  }
+  return deleted;
+};
+
 const deletePrefix = async (prefix) => {
   const bucket = required('R2_BUCKET_PUBLIC');
   let continuationToken;
@@ -247,7 +288,9 @@ module.exports = {
   presignUpload,
   verifyUpload,
   uploadObject,
+  listObjects,
   deleteObject,
+  deleteKeys,
   deleteOwned,
   deleteUserObjects,
   hasValidSignature,

@@ -1,14 +1,11 @@
 const guard = require('../../shared/guard');
 const firstIssueMessage = require('../../shared/validation');
 const { parsePagination } = require('../../shared/pagination');
-const { verifyToken } = require('../../shared/token');
 const { ok, fail } = require('../../shared/response');
 const logger = require('../../shared/logger');
 const r2 = require('../../shared/r2');
 const usersService = require('./users.service');
 const { updateUserSchema, photoKeySchema, emailParamsSchema } = require('./users.schema');
-
-const getUserIdFromToken = async (token) => (await verifyToken(token)).id;
 
 const replacePhoto = async (userId, imageKey) => {
   if (!r2.isOwnedKey(imageKey, 'avatar', userId)) {
@@ -37,19 +34,12 @@ const getAllUsers = guard('Error fetching users', 'Failed to fetch users', async
 });
 
 const updateUser = guard('Error in updateUserProfile', 'Failed to update user profile', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-
-  if (!token) {
-    return fail(res, 401, 'UNAUTHORIZED', 'Token is required');
-  }
-
-  const parsed = updateUserSchema.safeParse(req.body);
+  const parsed = updateUserSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return fail(res, 500, 'INTERNAL_ERROR', 'Failed to update user profile');
+    return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
   }
 
-  const userId = await getUserIdFromToken(token);
-  const result = await usersService.updateUser(userId, parsed.data);
+  const result = await usersService.updateUser(req.user.id, parsed.data);
 
   if (result === 'not_found') {
     return fail(res, 404, 'NOT_FOUND', 'User not found');
@@ -57,19 +47,15 @@ const updateUser = guard('Error in updateUserProfile', 'Failed to update user pr
   if (result === 'incorrect_password') {
     return fail(res, 400, 'INVALID_CREDENTIALS', 'Incorrect password');
   }
+  if (result === 'conflict') {
+    return fail(res, 409, 'CONFLICT', 'Username or email is already used');
+  }
 
   return ok(res, null, 'User profile updated successfully');
 });
 
 const deleteUserAccount = guard('Error in deleteUserAccount', 'Failed to delete user account', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-
-  if (!token) {
-    return fail(res, 401, 'UNAUTHORIZED', 'Token is required');
-  }
-
-  const userId = await getUserIdFromToken(token);
-  const result = await usersService.deleteUserAccount(userId);
+  const result = await usersService.deleteUserAccount(req.user.id);
 
   if (result === 'not_found') {
     return fail(res, 404, 'NOT_FOUND', 'User not found');

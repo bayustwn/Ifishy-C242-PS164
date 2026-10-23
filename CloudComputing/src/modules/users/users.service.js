@@ -28,14 +28,19 @@ const updateUser = async (userId, { username, email, password, newPassword }) =>
     nextPassword = await bcrypt.hash(newPassword, 10);
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      username: username || user.username,
-      email: email || user.email,
-      password: nextPassword,
-    },
-  });
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        username: username || user.username,
+        email: email || user.email,
+        password: nextPassword,
+      },
+    });
+  } catch (error) {
+    if (error.code === 'P2002') return 'conflict';
+    throw error;
+  }
 
   return 'ok';
 };

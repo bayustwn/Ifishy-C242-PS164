@@ -1,3 +1,5 @@
+jest.mock('../uploads.service', () => ({ findUsage: jest.fn() }));
+
 jest.mock('../../../shared/r2', () => {
   const actual = jest.requireActual('../../../shared/r2');
   return {
@@ -11,6 +13,7 @@ jest.mock('../../../shared/r2', () => {
 });
 
 const r2 = require('../../../shared/r2');
+const uploadsService = require('../uploads.service');
 const controller = require('../uploads.controller');
 
 const fakeRes = () => {
@@ -34,6 +37,7 @@ const call = (handler, req) => {
 beforeEach(() => {
   jest.resetAllMocks();
   r2.isConfigured.mockReturnValue(true);
+  uploadsService.findUsage.mockResolvedValue(null);
 });
 
 describe('presignUpload', () => {
@@ -181,6 +185,19 @@ describe('deleteUpload', () => {
     });
 
     expect(res.statusCode).toBe(403);
+    expect(r2.deleteObject).not.toHaveBeenCalled();
+  });
+
+  test('key masih dipakai → 409 tanpa delete', async () => {
+    uploadsService.findUsage.mockResolvedValue('post');
+
+    const res = await call(controller.deleteUpload, {
+      user: { id: 9 },
+      body: { key: 'posts/9/x.jpg' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
     expect(r2.deleteObject).not.toHaveBeenCalled();
   });
 });

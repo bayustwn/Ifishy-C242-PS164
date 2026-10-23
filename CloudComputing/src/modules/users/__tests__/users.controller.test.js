@@ -1,4 +1,4 @@
-// Unit test users.controller: mock service; token di-sign asli via jose.
+// Unit test users.controller: auth middleware diuji terpisah; controller memakai req.user.
 jest.mock('../users.service', () => ({
   getAllUsers: jest.fn(),
   updateUser: jest.fn(),
@@ -13,13 +13,9 @@ jest.mock('../../../shared/r2', () => {
   return { ...actual, verifyUpload: jest.fn(), deleteOwned: jest.fn() };
 });
 
-const { SignJWT } = require('jose');
 const r2 = require('../../../shared/r2');
 const usersService = require('../users.service');
 const controller = require('../users.controller');
-
-const encoder = new TextEncoder();
-const SECRET = 'test-secret-ifishy';
 
 const fakeRes = () => {
   const res = { statusCode: null, body: null };
@@ -39,16 +35,6 @@ const call = (handler, req) => {
   return Promise.resolve(handler(req, res)).then(() => res);
 };
 
-const tokenFor = async (id) =>
-  new SignJWT({ id })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('2d')
-    .sign(encoder.encode(SECRET));
-
-beforeAll(() => {
-  process.env.JWT_SECRET = SECRET;
-});
 beforeEach(() => {
   jest.resetAllMocks();
   r2.verifyUpload.mockResolvedValue({});
@@ -56,25 +42,18 @@ beforeEach(() => {
 });
 
 describe('updateUser', () => {
-  test('token tidak ada → 401 "Token is required"', async () => {
-    const res = await call(controller.updateUser, { headers: {}, body: {} });
-    expect(res.statusCode).toBe(401);
-    expect(res.body.error.message).toBe('Token is required');
+  test('body tidak valid → 400 tanpa update', async () => {
+    const res = await call(controller.updateUser, { user: { id: 5 }, body: { email: 'bukan-email' } });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
     expect(usersService.updateUser).not.toHaveBeenCalled();
   });
 
-  test('token invalid → 500 (perilaku lama: verify throw masuk catch)', async () => {
-    const res = await call(controller.updateUser, { headers: { authorization: 'Bearer hacker' }, body: {} });
-    expect(res.statusCode).toBe(500);
-    expect(res.body.error.message).toBe('Failed to update user profile');
-  });
-
   test('sukses → 200 "User profile updated successfully"', async () => {
-    const token = await tokenFor(5);
     usersService.updateUser.mockResolvedValue('ok');
 
     const res = await call(controller.updateUser, {
-      headers: { authorization: `Bearer ${token}` },
+      user: { id: 5 },
       body: { username: 'baru' },
     });
 
@@ -83,31 +62,50 @@ describe('updateUser', () => {
   });
 
   test('password lama salah → 400 "Incorrect password"', async () => {
-    const token = await tokenFor(5);
     usersService.updateUser.mockResolvedValue('incorrect_password');
 
     const res = await call(controller.updateUser, {
-      headers: { authorization: `Bearer ${token}` },
-      body: { password: 'salah', newPassword: 'x' },
+      user: { id: 5 },
+      body: { password: 'salah', newPassword: 'baru123' },
     });
 
     expect(res.statusCode).toBe(400);
     expect(res.body.error.message).toBe('Incorrect password');
   });
+
+  test('username/email bentrok → 409', async () => {
+    usersService.updateUser.mockResolvedValue('conflict');
+
+    const res = await call(controller.updateUser, {
+      user: { id: 5 },
+      body: { username: 'dipakai' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+  });
+
+  test('newPassword kurang dari 6 karakter → 400', async () => {
+    const res = await call(controller.updateUser, {
+      user: { id: 5 },
+      body: { password: 'lama', newPassword: '123' },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(usersService.updateUser).not.toHaveBeenCalled();
+  });
 });
 
 describe('deleteUserAccount', () => {
   test('sukses → 200; tidak ada → 404', async () => {
-    const token = await tokenFor(5);
-
     usersService.deleteUserAccount.mockResolvedValueOnce('ok');
-    let res = await call(controller.deleteUserAccount, { headers: { authorization: `Bearer ${token}` } });
+    let res = await call(controller.deleteUserAccount, { user: { id: 5 } });
     expect(res.statusCode).toBe(200);
     expect(res.body.message).toBe('User account deleted successfully');
 
     usersService.deleteUserAccount.mockReset();
     usersService.deleteUserAccount.mockResolvedValueOnce('not_found');
-    res = await call(controller.deleteUserAccount, { headers: { authorization: `Bearer ${token}` } });
+    res = await call(controller.deleteUserAccount, { user: { id: 5 } });
     expect(res.statusCode).toBe(404);
   });
 });
