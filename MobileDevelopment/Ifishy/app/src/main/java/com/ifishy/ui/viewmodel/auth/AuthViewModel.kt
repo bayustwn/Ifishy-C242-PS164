@@ -1,5 +1,6 @@
 package com.ifishy.ui.viewmodel.auth
 
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,31 +12,45 @@ import com.ifishy.data.repository.auth.AuthRepository
 import com.ifishy.utils.ResponseState
 import com.ifishy.utils.SingleEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Named
 
 @HiltViewModel
-class AuthViewModel @Inject constructor(@Named("AuthRepository") private val authRepository: AuthRepository) : ViewModel() {
+class AuthViewModel @Inject constructor(
+    @Named("AuthRepository") private val authRepository: AuthRepository
+) : ViewModel() {
 
-    val loginResponse : MutableLiveData<SingleEvent<ResponseState<LoginResponse>>> = MutableLiveData()
-    val signUpResponse : MutableLiveData<SingleEvent<ResponseState<SignUpResponse>>> = MutableLiveData()
+    private val _loginResponse = MutableLiveData<SingleEvent<ResponseState<LoginResponse>>>()
+    val loginResponse: LiveData<SingleEvent<ResponseState<LoginResponse>>> = _loginResponse
 
-    fun userLogin(userData: LoginRequest){
+    private val _signUpResponse = MutableLiveData<SingleEvent<ResponseState<SignUpResponse>>>()
+    val signUpResponse: LiveData<SingleEvent<ResponseState<SignUpResponse>>> = _signUpResponse
+
+    // Modern Kotlin Flow streams for coroutine callers
+    private val _loginFlow = MutableSharedFlow<ResponseState<LoginResponse>>()
+    val loginFlow = _loginFlow.asSharedFlow()
+
+    private val _signUpFlow = MutableSharedFlow<ResponseState<SignUpResponse>>()
+    val signUpFlow = _signUpFlow.asSharedFlow()
+
+    fun userLogin(userData: LoginRequest) {
         viewModelScope.launch {
-            loginResponse.value = SingleEvent(ResponseState.Loading)
-
-            val response = authRepository.login(userData)
-            loginResponse.postValue(response)
+            authRepository.login(userData).collect { state ->
+                _loginFlow.emit(state)
+                _loginResponse.value = SingleEvent(state)
+            }
         }
     }
 
-    fun signUp(userData: SignUpRequest){
+    fun signUp(userData: SignUpRequest) {
         viewModelScope.launch {
-            signUpResponse.value = SingleEvent(ResponseState.Loading)
-            val response = authRepository.signUp(userData)
-            signUpResponse.postValue(response)
+            authRepository.signUp(userData).collect { state ->
+                _signUpFlow.emit(state)
+                _signUpResponse.value = SingleEvent(state)
+            }
         }
     }
-
 }

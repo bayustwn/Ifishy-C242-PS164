@@ -135,6 +135,7 @@
     <string name="lanjutkan_tanpa_akun">Lanjutkan tanpa akun</string>
     <string name="email_tidak_valid">Email tidak valid</string>
     <string name="password_kurang_dari_6_karakter">Password kurang dari 6 karakter</string>
+    <string name="password_kurang_dari_8_karakter">Password minimal 8 karakter</string>
     <string name="scanning_error">Scanning Error</string>
     <string name="ulangi">Ulangi</string>
     <string name="ikan_tidak_terdeteksi">Ikan tidak terdeteksi</string>

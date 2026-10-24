@@ -10,15 +10,18 @@ import com.ifishy.data.model.auth.request.SignUpRequest
 import com.ifishy.data.model.auth.response.LoginResponse
 import com.ifishy.data.model.auth.response.SignUpResponse
 import com.ifishy.utils.ResponseState
-import com.ifishy.utils.SingleEvent
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import retrofit2.HttpException
 import java.io.IOException
 import javax.inject.Inject
 
 interface AuthRepository {
-    suspend fun login(userData: LoginRequest): SingleEvent<ResponseState<LoginResponse>>
-    suspend fun signUp(userData: SignUpRequest): SingleEvent<ResponseState<SignUpResponse>>
+    fun login(userData: LoginRequest): Flow<ResponseState<LoginResponse>>
+    fun signUp(userData: SignUpRequest): Flow<ResponseState<SignUpResponse>>
 }
 
 class AuthRepositoryImpl @Inject constructor(
@@ -26,33 +29,41 @@ class AuthRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Application
 ) : AuthRepository {
 
-    override suspend fun login(userData: LoginRequest): SingleEvent<ResponseState<LoginResponse>> {
-        return try {
+    override fun login(userData: LoginRequest): Flow<ResponseState<LoginResponse>> = flow {
+        emit(ResponseState.Loading)
+        try {
             val response = apiService.login(userData)
-            SingleEvent(ResponseState.Success(response))
+            emit(ResponseState.Success(response))
         } catch (e: IOException) {
-            SingleEvent(ResponseState.Error(context.getString(R.string.no_internet)))
+            emit(ResponseState.Error(context.getString(R.string.no_internet)))
         } catch (e: HttpException) {
-            val errorResponse = e.response()?.errorBody()?.string()
-            val errorMessage = Gson().fromJson(errorResponse, ErrorResponse::class.java)
-            SingleEvent(ResponseState.Error(errorMessage.message!!))
-        }catch (e: IllegalStateException){
-            SingleEvent(ResponseState.Error(context.getString(R.string.internal_server_error)))
+            emit(ResponseState.Error(parseHttpError(e)))
+        } catch (e: Exception) {
+            emit(ResponseState.Error(context.getString(R.string.internal_server_error)))
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
-    override suspend fun signUp(userData: SignUpRequest): SingleEvent<ResponseState<SignUpResponse>> {
-        return try {
+    override fun signUp(userData: SignUpRequest): Flow<ResponseState<SignUpResponse>> = flow {
+        emit(ResponseState.Loading)
+        try {
             val response = apiService.register(userData)
-            SingleEvent(ResponseState.Success(response))
+            emit(ResponseState.Success(response))
         } catch (e: IOException) {
-            SingleEvent(ResponseState.Error(context.getString(R.string.no_internet)))
+            emit(ResponseState.Error(context.getString(R.string.no_internet)))
         } catch (e: HttpException) {
-            val errorResponse = e.response()?.errorBody()?.string()
-            val errorMessage = Gson().fromJson(errorResponse, ErrorResponse::class.java)
-            SingleEvent(ResponseState.Error(errorMessage.message!!))
-        } catch (e: IllegalStateException){
-            SingleEvent(ResponseState.Error(context.getString(R.string.internal_server_error)))
+            emit(ResponseState.Error(parseHttpError(e)))
+        } catch (e: Exception) {
+            emit(ResponseState.Error(context.getString(R.string.internal_server_error)))
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private fun parseHttpError(e: HttpException): String {
+        return try {
+            val errorBody = e.response()?.errorBody()?.string()
+            val parsed = Gson().fromJson(errorBody, ErrorResponse::class.java)
+            parsed?.actualMessage ?: context.getString(R.string.internal_server_error)
+        } catch (_: Exception) {
+            context.getString(R.string.internal_server_error)
         }
     }
 }

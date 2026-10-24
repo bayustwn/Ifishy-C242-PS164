@@ -6,12 +6,8 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.util.Patterns
 import android.view.View
-import android.view.Window
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import com.ifishy.R
 import com.ifishy.data.model.auth.request.LoginRequest
 import com.ifishy.data.preference.PreferenceViewModel
@@ -26,7 +22,7 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class LoginActivity : AppCompatActivity(), View.OnClickListener {
 
-    private lateinit var binding:ActivityLoginBinding
+    private lateinit var binding: ActivityLoginBinding
     private val authViewModel by viewModels<AuthViewModel>()
     private val preferencesViewModel by viewModels<PreferenceViewModel>()
 
@@ -36,54 +32,89 @@ class LoginActivity : AppCompatActivity(), View.OnClickListener {
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        setupListeners()
+        setupTextWatchers()
+        setupObservers()
+    }
 
+    private fun setupListeners() {
         binding.button.setOnClickListener(this)
         binding.signup.setOnClickListener(this)
         binding.guest.setOnClickListener {
-            startActivity(Intent(this,GuestActivity::class.java))
+            startActivity(Intent(this, GuestActivity::class.java))
         }
+    }
 
-        binding.password.addTextChangedListener(object : TextWatcher{
+    private fun setupTextWatchers() {
+        binding.password.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {}
             override fun onTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {}
             override fun afterTextChanged(pass: Editable?) {
-
                 val password = pass.toString()
-
-                if (password.isNotEmpty() && password.length < 6){
-                    binding.passwordContainer.error = getString(R.string.password_kurang_dari_6_karakter)
-                    binding.password.error =
-                        getString(R.string.password_kurang_dari_6_karakter)
-                }else{
-                    binding.password.error =null
+                if (password.isNotEmpty() && password.length < 8) {
+                    val errorMsg = getString(R.string.password_kurang_dari_8_karakter)
+                    binding.passwordContainer.error = errorMsg
+                    binding.password.error = errorMsg
+                } else {
+                    binding.password.error = null
                     binding.passwordContainer.error = null
                 }
-
             }
-
         })
 
-        binding.email.addTextChangedListener(object : TextWatcher{
+        binding.email.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {}
             override fun onTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {}
             override fun afterTextChanged(email: Editable?) {
-
-                val emails = email.toString()
-
+                val emails = email.toString().trim()
                 if (emails.isNotEmpty() && !Patterns.EMAIL_ADDRESS.matcher(emails).matches()) {
                     binding.email.error = getString(R.string.email_tidak_valid)
                 } else {
                     binding.email.error = null
                 }
-
             }
-
         })
-
     }
 
-    private fun isNotValid(): Boolean {
-        val email = binding.email.text.toString()
+    private fun setupObservers() {
+        authViewModel.loginResponse.observe(this) { event ->
+            event.getContentIfNotHandled()?.let { response ->
+                when (response) {
+                    is ResponseState.Loading -> {
+                        isLoading(true)
+                    }
+                    is ResponseState.Success -> {
+                        isLoading(false)
+                        val token = response.data.authToken
+                        if (!token.isNullOrBlank()) {
+                            preferencesViewModel.saveToken(
+                                token,
+                                binding.email.text.toString().trim()
+                            )
+                            goTo(MainActivity::class.java)
+                        } else {
+                            Dialog.messageDialog(
+                                supportFragmentManager,
+                                message = getString(R.string.login_error),
+                                desc = "Token autentikasi tidak valid dari server"
+                            )
+                        }
+                    }
+                    is ResponseState.Error -> {
+                        isLoading(false)
+                        Dialog.messageDialog(
+                            supportFragmentManager,
+                            message = getString(R.string.login_error),
+                            desc = response.message
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun isValid(): Boolean {
+        val email = binding.email.text.toString().trim()
         val password = binding.password.text.toString()
 
         if (email.isEmpty() || password.isEmpty()) {
@@ -97,66 +128,48 @@ class LoginActivity : AppCompatActivity(), View.OnClickListener {
         return true
     }
 
-    private fun isLoading(loading:Boolean){
-        if (loading){
+    private fun isLoading(loading: Boolean) {
+        if (loading) {
             binding.apply {
-                this.loading.visibility=View.VISIBLE
+                this.loading.visibility = View.VISIBLE
                 this.button.apply {
                     this.text = ""
                     this.isEnabled = false
                 }
             }
-        }else{
+        } else {
             binding.apply {
                 this.loading.visibility = View.GONE
                 this.button.apply {
-                    this.text =  applicationContext.getString(R.string.login)
+                    this.text = applicationContext.getString(R.string.login)
                     this.isEnabled = true
                 }
             }
         }
     }
 
-    private fun userLogin(data: LoginRequest){
-        authViewModel.userLogin(data).apply {
-            authViewModel.loginResponse.observe(this@LoginActivity){event->
-                event.getContentIfNotHandled()?.let { response->
-                    when(response){
-                        is ResponseState.Loading -> {
-                            isLoading(true)
-                        }
-                        is ResponseState.Success -> {
-                            isLoading(false)
-                            preferencesViewModel.saveToken(response.data.token!!,
-                                binding.email.text.toString()
-                            )
-                            goTo(MainActivity::class.java)
-                        }
-                        is ResponseState.Error -> {
-                            isLoading(false)
-                            Dialog.messageDialog(supportFragmentManager, message = getString(R.string.login_error), desc = response.message)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private fun goTo(to: Class<*>){
-        startActivity(Intent(this@LoginActivity,to))
+    private fun goTo(to: Class<*>) {
+        startActivity(Intent(this, to))
         finish()
     }
+
     override fun onClick(v: View?) {
-        when(v){
-            binding.button->{
-                val userData = LoginRequest(binding.email.text.toString(),binding.password.text.toString())
-                if(isNotValid()){
-                    userLogin(userData)
-                }else{
-                    Dialog.messageDialog(supportFragmentManager, message = getString(R.string.login_error), desc = getString(R.string.field_empty))
+        when (v) {
+            binding.button -> {
+                val email = binding.email.text.toString().trim()
+                val password = binding.password.text.toString()
+                if (isValid()) {
+                    val userData = LoginRequest(email, password)
+                    authViewModel.userLogin(userData)
+                } else {
+                    Dialog.messageDialog(
+                        supportFragmentManager,
+                        message = getString(R.string.login_error),
+                        desc = getString(R.string.field_empty)
+                    )
                 }
             }
-            binding.signup->{
+            binding.signup -> {
                 goTo(SignUpActivity::class.java)
             }
         }

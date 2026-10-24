@@ -26,7 +26,7 @@ interface BookmarkRepository {
 class BookmarkRepositoryImpl@Inject constructor(private val apiService: ApiService,@ApplicationContext private val context: Application): BookmarkRepository{
     override suspend fun getAllBookmark(token:String): ResponseState<BookmarkResponse> {
         return try {
-            val response = apiService.getAllBookmark(" Bearer $token")
+            val response = apiService.getAllBookmark("Bearer $token")
             ResponseState.Success(response)
         } catch (e: IOException) {
             ResponseState.Error(context.getString(R.string.no_internet))
@@ -44,7 +44,7 @@ class BookmarkRepositoryImpl@Inject constructor(private val apiService: ApiServi
         item: BookmarkRequest
     ): SingleEvent<ResponseState<MessageResponse>> {
         return try {
-            val response = apiService.setBookmark(" Bearer $token",item)
+            val response = apiService.setBookmark("Bearer $token",item)
             SingleEvent(ResponseState.Success(response))
         } catch (e: IOException) {
             SingleEvent(ResponseState.Error(context.getString(R.string.no_internet)))
@@ -62,7 +62,7 @@ class BookmarkRepositoryImpl@Inject constructor(private val apiService: ApiServi
         item: BookmarkRequest
     ): SingleEvent<ResponseState<MessageResponse>> {
         return try {
-            val response = apiService.deleteBookmark(" Bearer $token",item)
+            val response = apiService.deleteBookmark("Bearer $token",item)
             SingleEvent(ResponseState.Success(response))
         } catch (e: IOException) {
             SingleEvent(ResponseState.Error(context.getString(R.string.no_internet)))
