@@ -1,7 +1,4 @@
-FROM node:18-alpine
-
-# Puppeteer hanya dipakai endpoint scraping opsional — skip download Chromium agar build cepat
-ENV PUPPETEER_SKIP_DOWNLOAD=true
+FROM node:22-alpine
 
 # Prisma engine binaries butuh openssl di alpine
 RUN apk add --no-cache openssl

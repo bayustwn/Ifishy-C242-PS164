@@ -147,7 +147,7 @@ describe('community.controller', () => {
     service.getPosts.mockResolvedValue([{ id: POST_ID_2 }]);
     let res = makeRes();
     await controller.getPosts(req(), res);
-    expect(service.getPosts).toHaveBeenCalledWith(USER_ID, {});
+    expect(service.getPosts).toHaveBeenCalledWith(USER_ID, { limit: 10, offset: 0 });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ success: true, data: [{ id: POST_ID_2 }] });
 
@@ -227,7 +227,7 @@ describe('community.controller', () => {
 
     res = makeRes();
     await controller.getComments(req({ params: { postId: POST_ID } }), res);
-    expect(service.getComments).toHaveBeenCalledWith(POST_ID, USER_ID, {});
+    expect(service.getComments).toHaveBeenCalledWith(POST_ID, USER_ID, { limit: 10, offset: 0 });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ success: true, data: [{ id: COMMENT_ID }] });
   });
@@ -300,7 +300,7 @@ describe('community.controller', () => {
 
     await controller.getLikedCommentsByUser(req(), res);
 
-    expect(service.getLikedCommentsByUser).toHaveBeenCalledWith(USER_ID, {});
+    expect(service.getLikedCommentsByUser).toHaveBeenCalledWith(USER_ID, { limit: 10, offset: 0 });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ success: true, data: [{ id: COMMENT_ID }] });
   });

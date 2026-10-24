@@ -9,6 +9,7 @@ const mockPrisma = {
   },
   post: { findUnique: jest.fn(), findMany: jest.fn() },
   article: { findUnique: jest.fn(), findMany: jest.fn() },
+  $transaction: jest.fn(),
   $disconnect: jest.fn(),
 };
 
@@ -24,7 +25,10 @@ const BOOKMARK_ID_3 = '20000000-0000-4000-8000-000000000001';
 const POST_ID = '20000000-0000-4000-8000-000000000011';
 const ARTICLE_ID = '20000000-0000-4000-8000-000000000022';
 
-beforeEach(() => jest.resetAllMocks());
+beforeEach(() => {
+  jest.resetAllMocks();
+  mockPrisma.$transaction.mockImplementation((fn) => fn(mockPrisma));
+});
 
 describe('addBookmark (toggle)', () => {
   test('belum ada → insert → "added"', async () => {
@@ -45,7 +49,7 @@ describe('addBookmark (toggle)', () => {
     const outcome = await bookmarkService.addBookmark(USER_ID, { itemId: ITEM_ID, type: 'article' });
 
     expect(outcome).toBe('removed');
-    expect(mockPrisma.bookmark.delete).toHaveBeenCalledWith({ where: { id: 7 } });
+    expect(mockPrisma.bookmark.deleteMany).toHaveBeenCalledWith({ where: { id: 7 } });
     expect(mockPrisma.bookmark.create).not.toHaveBeenCalled();
   });
 });
@@ -73,7 +77,7 @@ describe('getBookmarks', () => {
 
     const list = await bookmarkService.getBookmarks(USER_ID);
 
-    expect(mockPrisma.bookmark.findMany).toHaveBeenCalledWith({ where: { userId: USER_ID }, orderBy: { createdAt: 'desc' } });
+    expect(mockPrisma.bookmark.findMany).toHaveBeenCalledWith({ where: { userId: USER_ID }, orderBy: { createdAt: 'desc' }, take: 10 });
     expect(mockPrisma.post.findMany).toHaveBeenCalledWith({ where: { id: { in: [POST_ID] } }, select: { id: true, title: true } });
     expect(mockPrisma.article.findMany).toHaveBeenCalledWith({ where: { id: { in: [ARTICLE_ID] } }, select: { id: true, title: true } });
     expect(mockPrisma.post.findUnique).not.toHaveBeenCalled();

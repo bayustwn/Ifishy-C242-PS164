@@ -23,10 +23,7 @@ const loginUser = guard('Error in loginUser', 'Failed to login', async (req, res
 
   const result = await authService.loginUser(parsed.data);
 
-  if (result === 'not_found') {
-    return fail(res, 404, 'NOT_FOUND', 'User not found');
-  }
-  if (result === 'invalid') {
+  if (result === 'not_found' || result === 'invalid') {
     return fail(res, 401, 'INVALID_CREDENTIALS', 'Invalid credentials');
   }
 

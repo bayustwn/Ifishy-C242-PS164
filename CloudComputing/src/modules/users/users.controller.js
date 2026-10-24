@@ -24,7 +24,7 @@ const replacePhoto = async (userId, imageKey) => {
     });
   }
 
-  return { url: r2.resolveMediaUrl(imageKey) };
+  return { url: await r2.resolveMediaUrl(imageKey) };
 };
 
 const updateUser = guard('Error in updateUserProfile', 'Failed to update user profile', async (req, res) => {

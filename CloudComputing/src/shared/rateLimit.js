@@ -1,6 +1,11 @@
 const { RateLimiterRedis, RateLimiterMemory } = require('rate-limiter-flexible');
 const redis = require('./redis');
+const logger = require('./logger');
 const { fail } = require('./response');
+
+if (!redis && process.env.NODE_ENV === 'production') {
+  logger.warn('REDIS_URL is not set: rate limits are per instance');
+}
 
 const createLimiter = (opts) =>
   redis

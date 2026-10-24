@@ -1,3 +1,7 @@
+jest.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: jest.fn(async (_client, command) => `https://signed.example/${command.input.Bucket}/${command.input.Key}`),
+}));
+
 const r2 = require('../r2');
 
 const USER_ID = '00000000-0000-4000-8000-000000000009';
@@ -60,14 +64,33 @@ describe('r2 key helpers', () => {
     expect(r2.hasValidSignature(Buffer.from([0x89, 0x50]), 'image/jpeg')).toBe(false);
   });
 
-  test('resolveMediaUrl memakai URL publik untuk semua purpose, termasuk scan', () => {
+  test('resolveMediaUrl memakai URL publik untuk avatar/post dan fallback scan', async () => {
     const original = process.env.R2_PUBLIC_BASE_URL;
+    const originalPrivate = process.env.R2_BUCKET_PRIVATE;
     process.env.R2_PUBLIC_BASE_URL = 'https://media.example.com';
-    expect(r2.resolveMediaUrl('scans/00000000-0000-4000-8000-000000000009/a.jpg')).toBe('https://media.example.com/scans/00000000-0000-4000-8000-000000000009/a.jpg');
-    expect(r2.resolveMediaUrl('https://legacy.example/a.jpg')).toBe('https://legacy.example/a.jpg');
-    expect(r2.resolveMediaUrl(null)).toBeNull();
+    delete process.env.R2_BUCKET_PRIVATE;
+    await expect(r2.resolveMediaUrl('scans/00000000-0000-4000-8000-000000000009/a.jpg')).resolves.toBe('https://media.example.com/scans/00000000-0000-4000-8000-000000000009/a.jpg');
+    await expect(r2.resolveMediaUrl('https://legacy.example/a.jpg')).resolves.toBe('https://legacy.example/a.jpg');
+    await expect(r2.resolveMediaUrl(null)).resolves.toBeNull();
 
     if (original === undefined) delete process.env.R2_PUBLIC_BASE_URL;
     else process.env.R2_PUBLIC_BASE_URL = original;
+    if (originalPrivate === undefined) delete process.env.R2_BUCKET_PRIVATE;
+    else process.env.R2_BUCKET_PRIVATE = originalPrivate;
+  });
+
+  test('resolveMediaUrl menandatangani scan saat R2_BUCKET_PRIVATE diatur', async () => {
+    const original = process.env.R2_BUCKET_PRIVATE;
+    process.env.R2_BUCKET_PRIVATE = 'ifishy-private';
+    process.env.R2_ACCOUNT_ID = 'test-account';
+    process.env.R2_ACCESS_KEY_ID = 'test-key';
+    process.env.R2_SECRET_ACCESS_KEY = 'test-secret';
+
+    await expect(r2.resolveMediaUrl('scans/00000000-0000-4000-8000-000000000009/a.jpg'))
+      .resolves.toBe('https://signed.example/ifishy-private/scans/00000000-0000-4000-8000-000000000009/a.jpg');
+    expect(r2.isScanPrivate()).toBe(true);
+
+    if (original === undefined) delete process.env.R2_BUCKET_PRIVATE;
+    else process.env.R2_BUCKET_PRIVATE = original;
   });
 });

@@ -2,19 +2,18 @@ name: ifishy-dev
 
 services:
   db:
-    image: mysql:8.4
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ifishy_root
-      MYSQL_DATABASE: ifishy
-      MYSQL_USER: ifishy_dev
-      MYSQL_PASSWORD: ifishy_pass
+      POSTGRES_DB: ifishy
+      POSTGRES_USER: ifishy_dev
+      POSTGRES_PASSWORD: ifishy_pass
     ports:
-      - "3307:3306"
+      - "5442:5432"
     volumes:
-      - db_data:/var/lib/mysql
+      - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1"]
+      test: ["CMD-SHELL", "pg_isready -U ifishy_dev -d ifishy"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -43,11 +42,11 @@ services:
       PORT: 8080
       JWT_SECRET: dev-secret-ifishy
       DB_HOST: db
-      DB_PORT: 3306
+      DB_PORT: 5432
       DB_NAME: ifishy
       DB_USER: ifishy_dev
       DB_PASS: ifishy_pass
-      DATABASE_URL: mysql://ifishy_dev:ifishy_pass@db:3306/ifishy
+      DATABASE_URL: postgresql://ifishy_dev:ifishy_pass@db:5432/ifishy?schema=public
       REDIS_URL: redis://redis:6379
     volumes:
       - ./CloudComputing/src:/usr/src/app/src
@@ -63,4 +62,4 @@ services:
         condition: service_healthy
 
 volumes:
-  db_data:
+  pg_data:

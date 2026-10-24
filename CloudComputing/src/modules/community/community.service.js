@@ -36,10 +36,12 @@ const findPostByIdAndUser = (postId, userId) =>
   prisma.post.findFirst({ where: { id: postId, userId } });
 
 const updatePost = async (postId, userId, { title, content }, imageUrl) => {
-  await prisma.post.update({
-    where: { id: postId },
-    data: { title: title ?? null, content: content ?? null, imageUrl },
-  });
+  const data = {};
+  if (title !== undefined) data.title = title;
+  if (content !== undefined) data.content = content;
+  if (imageUrl !== undefined) data.imageUrl = imageUrl;
+
+  await prisma.post.update({ where: { id: postId }, data });
   return 'ok';
 };
 
@@ -160,11 +162,18 @@ const getPostById = async (postId) => {
 };
 
 const addShareToPost = async (postId, userId) => {
-  const existingShare = await prisma.share.findFirst({ where: { postId, userId } });
-  if (existingShare) return 'already_shared';
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existingShare = await tx.share.findFirst({ where: { postId, userId } });
+      if (existingShare) return 'already_shared';
 
-  await prisma.share.create({ data: { postId, userId } });
-  return 'ok';
+      await tx.share.create({ data: { postId, userId } });
+      return 'ok';
+    });
+  } catch (error) {
+    if (error.code === 'P2002') return 'already_shared';
+    throw error;
+  }
 };
 
 const addComment = async (postId, userId, content) => {
@@ -288,28 +297,35 @@ const addReplyToComment = async (commentId, userId, content) => {
 };
 
 const addLikeToComment = async (commentId, userId) => {
-  const existingLike = await prisma.like.findUnique({
-    where: { commentId_userId: { commentId, userId } },
-    select: { id: true },
-  });
-  if (existingLike) return 'already_liked';
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existingLike = await tx.like.findUnique({
+        where: { commentId_userId: { commentId, userId } },
+        select: { id: true },
+      });
+      if (existingLike) return 'already_liked';
 
-  await prisma.like.create({ data: { commentId, userId } });
-  await prisma.comment.update({ where: { id: commentId }, data: { likeCount: { increment: 1 } } });
-  return 'ok';
+      await tx.like.create({ data: { commentId, userId } });
+      return 'ok';
+    });
+  } catch (error) {
+    if (error.code === 'P2002') return 'already_liked';
+    throw error;
+  }
 };
 
 const removeLikeFromComment = async (commentId, userId) => {
   if (!isUuid(commentId)) return 'not_liked';
-  const existingLike = await prisma.like.findUnique({
-    where: { commentId_userId: { commentId, userId } },
-    select: { id: true },
-  });
-  if (!existingLike) return 'not_liked';
+  return prisma.$transaction(async (tx) => {
+    const existingLike = await tx.like.findUnique({
+      where: { commentId_userId: { commentId, userId } },
+      select: { id: true },
+    });
+    if (!existingLike) return 'not_liked';
 
-  await prisma.like.delete({ where: { id: existingLike.id } });
-  await prisma.comment.update({ where: { id: commentId }, data: { likeCount: { decrement: 1 } } });
-  return 'ok';
+    const deleted = await tx.like.deleteMany({ where: { commentId, userId } });
+    return deleted.count === 0 ? 'not_liked' : 'ok';
+  });
 };
 
 const getLikedCommentsByUser = async (userId, opts = {}) => {
@@ -320,7 +336,8 @@ const getLikedCommentsByUser = async (userId, opts = {}) => {
     select: {
       comment: {
         select: {
-          id: true, content: true, createdAt: true, likeCount: true,
+          id: true, content: true, createdAt: true,
+          _count: { select: { likes: true } },
           post: { select: { id: true, title: true } },
         },
       },
@@ -331,7 +348,7 @@ const getLikedCommentsByUser = async (userId, opts = {}) => {
     id: comment.id,
     content: comment.content,
     created_at: comment.createdAt,
-    like_count: comment.likeCount,
+    like_count: Number(comment._count.likes),
     post_title: comment.post.title,
     post_id: comment.post.id,
     timeSinceLiked: minutesAgo(comment.createdAt),
@@ -344,31 +361,32 @@ const findVote = (postId, userId) =>
     select: { voteType: true },
   });
 
-const addUpvoteToPost = async (postId, userId) => {
-  const existingVote = await findVote(postId, userId);
-  if (existingVote?.voteType === 'upvote') return 'already_upvoted';
-  if (existingVote?.voteType === 'downvote') {
-    await prisma.postVote.deleteMany({ where: { postId, userId } });
-    await prisma.post.update({ where: { id: postId }, data: { downvoteCount: { decrement: 1 } } });
-  }
+const voteOnPost = async (postId, userId, voteType) => {
+  const already = voteType === 'upvote' ? 'already_upvoted' : 'already_downvoted';
 
-  await prisma.postVote.create({ data: { postId, userId, voteType: 'upvote' } });
-  await prisma.post.update({ where: { id: postId }, data: { upvoteCount: { increment: 1 } } });
-  return 'ok';
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existingVote = await tx.postVote.findFirst({
+        where: { postId, userId },
+        select: { voteType: true },
+      });
+      if (existingVote?.voteType === voteType) return already;
+      if (existingVote) {
+        await tx.postVote.deleteMany({ where: { postId, userId } });
+      }
+
+      await tx.postVote.create({ data: { postId, userId, voteType } });
+      return 'ok';
+    });
+  } catch (error) {
+    if (error.code === 'P2002') return already;
+    throw error;
+  }
 };
 
-const addDownvoteToPost = async (postId, userId) => {
-  const existingVote = await findVote(postId, userId);
-  if (existingVote?.voteType === 'downvote') return 'already_downvoted';
-  if (existingVote?.voteType === 'upvote') {
-    await prisma.postVote.deleteMany({ where: { postId, userId } });
-    await prisma.post.update({ where: { id: postId }, data: { upvoteCount: { decrement: 1 } } });
-  }
+const addUpvoteToPost = (postId, userId) => voteOnPost(postId, userId, 'upvote');
 
-  await prisma.postVote.create({ data: { postId, userId, voteType: 'downvote' } });
-  await prisma.post.update({ where: { id: postId }, data: { downvoteCount: { increment: 1 } } });
-  return 'ok';
-};
+const addDownvoteToPost = (postId, userId) => voteOnPost(postId, userId, 'downvote');
 
 const getVoteStatusById = async (postId, userId) => {
   if (!isUuid(postId)) return 'no vote';
@@ -378,13 +396,16 @@ const getVoteStatusById = async (postId, userId) => {
 
 const removeVoteFromPost = async (postId, userId, type) => {
   if (!isUuid(postId)) return `not_${type}`;
-  const existingVote = await findVote(postId, userId);
-  if (!existingVote || existingVote.voteType !== type) return `not_${type}`;
+  return prisma.$transaction(async (tx) => {
+    const existingVote = await tx.postVote.findFirst({
+      where: { postId, userId },
+      select: { voteType: true },
+    });
+    if (!existingVote || existingVote.voteType !== type) return `not_${type}`;
 
-  await prisma.postVote.deleteMany({ where: { postId, userId } });
-  const column = type === 'upvote' ? { upvoteCount: { decrement: 1 } } : { downvoteCount: { decrement: 1 } };
-  await prisma.post.update({ where: { id: postId }, data: column });
-  return 'ok';
+    const deleted = await tx.postVote.deleteMany({ where: { postId, userId } });
+    return deleted.count === 0 ? `not_${type}` : 'ok';
+  });
 };
 
 module.exports = {

@@ -23,8 +23,10 @@ process.env.R2_ACCOUNT_ID = 'test-account';
 process.env.R2_ACCESS_KEY_ID = 'test-key';
 process.env.R2_SECRET_ACCESS_KEY = 'test-secret';
 process.env.R2_BUCKET_PUBLIC = 'test-bucket';
+process.env.R2_BUCKET_PRIVATE = 'test-private-bucket';
 process.env.R2_PUBLIC_BASE_URL = 'https://media.example.com';
 
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const r2 = require('../r2');
 
 const USER_ID = '00000000-0000-4000-8000-000000000009';
@@ -33,6 +35,7 @@ const key = `scans/${USER_ID}/abc.jpg`;
 beforeEach(() => {
   mockSend.mockReset();
   mockSend.mockResolvedValue({});
+  getSignedUrl.mockReset();
 });
 
 describe('verifyUpload lifecycle', () => {
@@ -52,7 +55,7 @@ describe('verifyUpload lifecycle', () => {
 
     await expect(r2.verifyUpload(key)).rejects.toMatchObject({ code: 'INVALID_UPLOAD' });
     expect(mockSend).toHaveBeenCalledTimes(2);
-    expect(mockSend.mock.calls[1][0].input).toEqual({ Bucket: 'test-bucket', Key: key });
+    expect(mockSend.mock.calls[1][0].input).toEqual({ Bucket: 'test-private-bucket', Key: key });
   });
 
   test('magic bytes tidak cocok → INVALID_UPLOAD dan objek dihapus', async () => {
@@ -62,7 +65,18 @@ describe('verifyUpload lifecycle', () => {
 
     await expect(r2.verifyUpload(key)).rejects.toMatchObject({ code: 'INVALID_UPLOAD' });
     expect(mockSend).toHaveBeenCalledTimes(3);
-    expect(mockSend.mock.calls[2][0].input).toEqual({ Bucket: 'test-bucket', Key: key });
+    expect(mockSend.mock.calls[2][0].input).toEqual({ Bucket: 'test-private-bucket', Key: key });
+  });
+});
+
+describe('presignUpload', () => {
+  test('scan memakai bucket privat', async () => {
+    getSignedUrl.mockResolvedValue('https://upload.example/signed');
+
+    const result = await r2.presignUpload({ purpose: 'scan', contentType: 'image/jpeg', userId: USER_ID });
+
+    expect(result.key).toMatch(new RegExp(`^scans/${USER_ID}/[0-9a-f-]{36}\\.jpg$`));
+    expect(getSignedUrl.mock.calls[0][1].input.Bucket).toBe('test-private-bucket');
   });
 });
 
@@ -76,6 +90,14 @@ describe('deleteKeys', () => {
     expect(mockSend).toHaveBeenCalledTimes(2);
     expect(mockSend.mock.calls[0][0].input.Delete.Objects).toHaveLength(1000);
     expect(mockSend.mock.calls[1][0].input.Delete.Objects).toHaveLength(1);
+  });
+
+  test('memisahkan key scan ke bucket privat', async () => {
+    await r2.deleteKeys([`posts/${USER_ID}/a.jpg`, `scans/${USER_ID}/b.jpg`]);
+
+    expect(mockSend).toHaveBeenCalledTimes(2);
+    expect(mockSend.mock.calls[0][0].input.Bucket).toBe('test-bucket');
+    expect(mockSend.mock.calls[1][0].input.Bucket).toBe('test-private-bucket');
   });
 });
 

@@ -3,12 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id           String  @id @default(uuid()) @db.Char(36)
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   username     String  @unique @db.VarChar(100)
   email        String  @unique @db.VarChar(150)
   password     String  @db.VarChar(255)
@@ -27,14 +27,12 @@ model User {
 }
 
 model Post {
-  id            String   @id @default(uuid()) @db.Char(36)
-  userId        String   @map("user_id") @db.Char(36)
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
   title         String   @db.VarChar(200)
   content       String   @db.Text
   imageUrl      String?  @map("image_url") @db.VarChar(500)
   createdAt     DateTime @default(now()) @map("created_at")
-  upvoteCount   Int      @default(0) @map("upvote_count")
-  downvoteCount Int      @default(0) @map("downvote_count")
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   comments  Comment[]
@@ -47,11 +45,10 @@ model Post {
 }
 
 model Comment {
-  id        String   @id @default(uuid()) @db.Char(36)
-  postId    String   @map("post_id") @db.Char(36)
-  userId    String   @map("user_id") @db.Char(36)
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
   content   String   @db.Text
-  likeCount Int      @default(0) @map("like_count")
   createdAt DateTime @default(now()) @map("created_at")
 
   post    Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -64,9 +61,9 @@ model Comment {
 }
 
 model Reply {
-  id              String   @id @default(uuid()) @db.Char(36)
-  parentCommentId String   @map("parent_comment_id") @db.Char(36)
-  userId          String   @map("user_id") @db.Char(36)
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentCommentId String   @map("parent_comment_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
   content         String   @db.Text
   createdAt       DateTime @default(now()) @map("created_at")
 
@@ -78,9 +75,9 @@ model Reply {
 }
 
 model Like {
-  id        String   @id @default(uuid()) @db.Char(36)
-  commentId String   @map("comment_id") @db.Char(36)
-  userId    String   @map("user_id") @db.Char(36)
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  commentId String   @map("comment_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
   comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
@@ -97,9 +94,9 @@ enum VoteType {
 }
 
 model PostVote {
-  id        String   @id @default(uuid()) @db.Char(36)
-  postId    String   @map("post_id") @db.Char(36)
-  userId    String   @map("user_id") @db.Char(36)
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
   voteType  VoteType @map("vote_type")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -111,9 +108,9 @@ model PostVote {
 }
 
 model Share {
-  id        String   @id @default(uuid()) @db.Char(36)
-  postId    String   @map("post_id") @db.Char(36)
-  userId    String   @map("user_id") @db.Char(36)
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -124,13 +121,14 @@ model Share {
 }
 
 model Article {
-  id          String    @id @default(uuid()) @db.Char(36)
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   title       String    @db.VarChar(300)
-  content     String    @db.LongText
+  content     String    @db.Text
   author      String?   @db.VarChar(150)
   publishedAt DateTime? @map("published_at")
   coverImage  String?   @map("cover_image") @db.VarChar(500)
 
+  @@index([publishedAt])
   @@map("articles")
 }
 
@@ -140,10 +138,10 @@ enum ItemType {
 }
 
 model Bookmark {
-  id        String   @id @default(uuid()) @db.Char(36)
-  userId    String   @map("user_id") @db.Char(36)
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
   type      ItemType
-  itemId    String   @map("item_id") @db.Char(36)
+  itemId    String   @map("item_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -153,8 +151,8 @@ model Bookmark {
 }
 
 model ScanHistory {
-  id            String   @id @default(uuid()) @db.Char(36)
-  userId        String   @map("user_id") @db.Char(36)
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
   fishImage     String   @map("fish_image") @db.VarChar(500)
   disease       String   @db.VarChar(150)
   confidence    Float

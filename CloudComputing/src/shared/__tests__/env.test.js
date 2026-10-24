@@ -2,7 +2,7 @@ const { validateEnv, REQUIRED } = require('../env');
 
 describe('validateEnv', () => {
   test('env lengkap → true', () => {
-    expect(validateEnv({ JWT_SECRET: 's', DATABASE_URL: 'mysql://x' })).toBe(true);
+    expect(validateEnv({ JWT_SECRET: 's', DATABASE_URL: 'postgresql://x' })).toBe(true);
   });
 
   test('env kosong → melempar ENV_INVALID berisi daftar variabel', () => {
@@ -17,6 +17,6 @@ describe('validateEnv', () => {
   });
 
   test('nilai spasi dianggap kosong', () => {
-    expect(() => validateEnv({ JWT_SECRET: '   ', DATABASE_URL: 'mysql://x' })).toThrow(/JWT_SECRET/);
+    expect(() => validateEnv({ JWT_SECRET: '   ', DATABASE_URL: 'postgresql://x' })).toThrow(/JWT_SECRET/);
   });
 });

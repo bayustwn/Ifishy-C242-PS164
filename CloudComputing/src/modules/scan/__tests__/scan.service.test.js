@@ -47,7 +47,7 @@ describe('getScanHistoriesByUserId', () => {
 
     const list = await scanService.getScanHistoriesByUserId(3);
 
-    expect(mockPrisma.scanHistory.findMany).toHaveBeenCalledWith({ where: { userId: 3 }, orderBy: { scanTimestamp: 'desc' } });
+    expect(mockPrisma.scanHistory.findMany).toHaveBeenCalledWith({ where: { userId: 3 }, orderBy: { scanTimestamp: 'desc' }, take: 10 });
     expect(list[0]).toStrictEqual({
       id: 2, userId: 3, fishImage: 'img-2', disease: 'Ichthyophthirius', confidence: 0.88,
       description: 'desc', treatment: 'cure', validation: 'ok', scanTimestamp: t,

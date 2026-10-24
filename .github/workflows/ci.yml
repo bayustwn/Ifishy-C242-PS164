@@ -12,6 +12,23 @@ jobs:
     defaults:
       run:
         working-directory: CloudComputing
+    env:
+      DATABASE_URL: postgresql://ifishy:ifishy@127.0.0.1:5432/ifishy?schema=public
+      JWT_SECRET: ci-test-secret
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ifishy
+          POSTGRES_USER: ifishy
+          POSTGRES_PASSWORD: ifishy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ifishy -d ifishy"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - uses: actions/checkout@v4
 
@@ -22,8 +39,6 @@ jobs:
           cache-dependency-path: CloudComputing/package-lock.json
 
       - name: Install dependencies
-        env:
-          PUPPETEER_SKIP_DOWNLOAD: 'true'
         run: npm ci
 
       - name: Generate Prisma client
@@ -34,6 +49,12 @@ jobs:
 
       - name: Test with coverage
         run: npm run test:cov
+
+      - name: Apply migrations and seed
+        run: npx prisma migrate deploy && npm run db:seed
+
+      - name: Integration tests
+        run: npm run test:integration
 
       - name: Build production image
         run: docker build -t ifishy-backend:${{ github.sha }} .

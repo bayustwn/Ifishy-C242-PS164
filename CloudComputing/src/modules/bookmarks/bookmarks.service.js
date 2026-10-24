@@ -2,17 +2,24 @@ const prisma = require('../../shared/prisma');
 const { sliceArgs } = require('../../shared/pagination');
 
 const addBookmark = async (userId, { itemId, type }) => {
-  const existingBookmark = await prisma.bookmark.findFirst({
-    where: { userId, itemId, type },
-  });
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existingBookmark = await tx.bookmark.findFirst({
+        where: { userId, itemId, type },
+      });
 
-  if (existingBookmark) {
-    await prisma.bookmark.delete({ where: { id: existingBookmark.id } });
-    return 'removed';
+      if (existingBookmark) {
+        await tx.bookmark.deleteMany({ where: { id: existingBookmark.id } });
+        return 'removed';
+      }
+
+      await tx.bookmark.create({ data: { userId, type, itemId } });
+      return 'added';
+    });
+  } catch (error) {
+    if (error.code === 'P2002') return 'added';
+    throw error;
   }
-
-  await prisma.bookmark.create({ data: { userId, type, itemId } });
-  return 'added';
 };
 
 const removeBookmark = async (userId, { itemId, type }) => {

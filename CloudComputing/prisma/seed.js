@@ -15,18 +15,21 @@ async function main() {
         content:
           'Kualitas air adalah faktor utama kesehatan ikan. Pastikan suhu, pH, dan kadar ammonia tetap dalam batas ideal. Lakukan penggantian air 20-30% setiap minggu dan gunakan aerator untuk menjaga oksigen terlarut.',
         author: 'Tim Ifishy',
+        publishedAt: new Date('2024-05-01T08:00:00Z'),
       },
       {
         title: 'Mengenal Aeromoniasis pada Ikan Nila',
         content:
           'Aeromoniasis adalah penyakit bakteri yang disebabkan oleh Aeromonas hydrophila. Gejalanya meliputi luka lecet di badan, sirip sobek, dan penurunan nafsu makan. Penanganan dilakukan dengan karantina ikan dan pengobatan antibiotik yang diresepkan.',
         author: 'Tim Ifishy',
+        publishedAt: new Date('2024-05-08T08:00:00Z'),
       },
       {
         title: 'Pencegahan Penyakit Ikan Secara Berkala',
         content:
           'Pencegahan lebih baik daripada pengobatan. Karantina ikan baru, bersihkan alat yang dipakai antar kolam sebelum digunakan, dan hindari memberi pakan berlebihan. Scan berkala dengan Ifishy membantu deteksi dini penyakit.',
         author: 'Tim Ifishy',
+        publishedAt: new Date('2024-05-15T08:00:00Z'),
       },
     ],
   });

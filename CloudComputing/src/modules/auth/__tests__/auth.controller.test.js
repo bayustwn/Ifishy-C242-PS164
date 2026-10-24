@@ -30,7 +30,7 @@ beforeEach(() => jest.resetAllMocks());
 
 describe('registerUser', () => {
   test('field kosong → 400 pesan required', async () => {
-    const res = await call(controller.registerUser, { body: { username: 'b', password: 'p', confirmPassword: 'p' } });
+    const res = await call(controller.registerUser, { body: { username: 'bayu', password: 'password1', confirmPassword: 'password1' } });
     expect(res.statusCode).toBe(400);
     expect(res.body.error.message).toBe('Username, email, password, and confirm password are required.');
     expect(authService.registerUser).not.toHaveBeenCalled();
@@ -38,7 +38,7 @@ describe('registerUser', () => {
 
   test('confirmPassword beda → 400 "Passwords do not match"', async () => {
     const res = await call(controller.registerUser, {
-      body: { username: 'b', email: 'x@t.loc', password: 'p', confirmPassword: 'beda' },
+      body: { username: 'bayu', email: 'x@t.loc', password: 'password1', confirmPassword: 'beda1234' },
     });
     expect(res.statusCode).toBe(400);
     expect(res.body.error.message).toBe('Passwords do not match');
@@ -48,7 +48,7 @@ describe('registerUser', () => {
     authService.registerUser.mockResolvedValue({ id: 9, username: 'b', email: 'x@t.loc' });
 
     const res = await call(controller.registerUser, {
-      body: { username: 'b', email: 'x@t.loc', password: 'p', confirmPassword: 'p' },
+      body: { username: 'bayu', email: 'x@t.loc', password: 'password1', confirmPassword: 'password1' },
     });
 
     expect(res.statusCode).toBe(201);
@@ -60,7 +60,7 @@ describe('registerUser', () => {
     authService.registerUser.mockRejectedValue(new Error('P2002 duplicate'));
 
     const res = await call(controller.registerUser, {
-      body: { username: 'b', email: 'x@t.loc', password: 'p', confirmPassword: 'p' },
+      body: { username: 'bayu', email: 'x@t.loc', password: 'password1', confirmPassword: 'password1' },
     });
 
     expect(res.statusCode).toBe(500);
@@ -69,11 +69,12 @@ describe('registerUser', () => {
 });
 
 describe('loginUser', () => {
-  test('service "not_found" → 404', async () => {
+  test('service "not_found" → 401 generic (anti-enumeration)', async () => {
     authService.loginUser.mockResolvedValue('not_found');
-    const res = await call(controller.loginUser, { body: { email: 'x@t.loc', password: 'p' } });
-    expect(res.statusCode).toBe(404);
-    expect(res.body.error.message).toBe('User not found');
+    const res = await call(controller.loginUser, { body: { email: 'x@t.loc', password: 'password1' } });
+    expect(res.statusCode).toBe(401);
+    expect(res.body.error.code).toBe('INVALID_CREDENTIALS');
+    expect(res.body.error.message).toBe('Invalid credentials');
   });
 
   test('service "invalid" → 401', async () => {
@@ -85,7 +86,7 @@ describe('loginUser', () => {
 
   test('sukses → 200 dengan token', async () => {
     authService.loginUser.mockResolvedValue({ token: 'jwt-token' });
-    const res = await call(controller.loginUser, { body: { email: 'x@t.loc', password: 'benar' } });
+    const res = await call(controller.loginUser, { body: { email: 'x@t.loc', password: 'password1' } });
     expect(res.statusCode).toBe(200);
     expect(res.body.data.token).toBe('jwt-token');
     expect(res.body.message).toBe('Login successful');
@@ -93,7 +94,7 @@ describe('loginUser', () => {
 
   test('service error (mis. JWT_SECRET hilang) → 500 "Failed to login"', async () => {
     authService.loginUser.mockRejectedValue(new Error('JWT_SECRET is missing'));
-    const res = await call(controller.loginUser, { body: { email: 'x@t.loc', password: 'p' } });
+    const res = await call(controller.loginUser, { body: { email: 'x@t.loc', password: 'password1' } });
     expect(res.statusCode).toBe(500);
     expect(res.body.error.message).toBe('Failed to login');
   });

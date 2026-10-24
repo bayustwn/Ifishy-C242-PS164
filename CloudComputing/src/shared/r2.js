@@ -13,6 +13,7 @@ const { isUuid } = require('./id');
 
 const MB = 1024 * 1024;
 const UPLOAD_URL_TTL = 300;
+const SIGNED_URL_TTL = 3600;
 
 const PURPOSES = {
   avatar: {
@@ -74,6 +75,24 @@ const required = (name) => {
   return value;
 };
 
+const privateScanBucket = () => {
+  const value = process.env.R2_BUCKET_PRIVATE;
+  return value && String(value).trim() ? value : null;
+};
+
+const bucketFor = (purpose) => {
+  if (purpose === 'scan') {
+    const bucket = privateScanBucket();
+    if (bucket) return bucket;
+  }
+  return required('R2_BUCKET_PUBLIC');
+};
+
+const purposeForPrefix = (prefix) => {
+  const name = String(prefix).split('/')[0];
+  return Object.keys(PURPOSES).find((purpose) => PURPOSES[purpose].prefix === name) ?? null;
+};
+
 const getClient = () => {
   if (!client) {
     client = new S3Client({
@@ -124,7 +143,7 @@ const publicUrl = (value) => {
 const presignUpload = async ({ purpose, contentType, userId }) => {
   const key = buildKey(purpose, userId, contentType);
   const command = new PutObjectCommand({
-    Bucket: required('R2_BUCKET_PUBLIC'),
+    Bucket: bucketFor(purpose),
     Key: key,
     ContentType: contentType,
   });
@@ -138,16 +157,18 @@ const presignUpload = async ({ purpose, contentType, userId }) => {
 };
 
 const deleteObject = async (key) => {
-  if (!parseKey(key)) throw new Error('Invalid upload key');
-  await getClient().send(new DeleteObjectCommand({ Bucket: required('R2_BUCKET_PUBLIC'), Key: key }));
+  const parsed = parseKey(key);
+  if (!parsed) throw new Error('Invalid upload key');
+  await getClient().send(new DeleteObjectCommand({ Bucket: bucketFor(parsed.purpose), Key: key }));
 };
 
 const verifyUpload = async (key) => {
   const parsed = parseKey(key);
   if (!parsed) throw Object.assign(new Error('Invalid upload key'), { code: 'INVALID_KEY' });
   const policy = PURPOSES[parsed.purpose];
+  const bucket = bucketFor(parsed.purpose);
   const head = await getClient().send(
-    new HeadObjectCommand({ Bucket: required('R2_BUCKET_PUBLIC'), Key: key }),
+    new HeadObjectCommand({ Bucket: bucket, Key: key }),
   );
   const size = Number(head.ContentLength);
   const contentType = head.ContentType;
@@ -164,7 +185,7 @@ const verifyUpload = async (key) => {
   }
 
   const object = await getClient().send(
-    new GetObjectCommand({ Bucket: required('R2_BUCKET_PUBLIC'), Key: key, Range: 'bytes=0-11' }),
+    new GetObjectCommand({ Bucket: bucket, Key: key, Range: 'bytes=0-11' }),
   );
   const bytes = await object.Body.transformToByteArray();
   if (!hasValidSignature(bytes, contentType)) {
@@ -179,10 +200,11 @@ const verifyUpload = async (key) => {
 };
 
 const uploadObject = async ({ key, body, contentType, cacheControl }) => {
-  if (!parseKey(key)) throw new Error('Invalid upload key');
+  const parsed = parseKey(key);
+  if (!parsed) throw new Error('Invalid upload key');
   await getClient().send(
     new PutObjectCommand({
-      Bucket: required('R2_BUCKET_PUBLIC'),
+      Bucket: bucketFor(parsed.purpose),
       Key: key,
       Body: body,
       ContentType: contentType,
@@ -199,7 +221,7 @@ const deleteOwned = async (key, purpose, userId) => {
 };
 
 const listObjects = async (prefix) => {
-  const bucket = required('R2_BUCKET_PUBLIC');
+  const bucket = bucketFor(purposeForPrefix(prefix));
   const objects = [];
   let continuationToken;
 
@@ -223,24 +245,33 @@ const listObjects = async (prefix) => {
 };
 
 const deleteKeys = async (keys) => {
-  const bucket = required('R2_BUCKET_PUBLIC');
+  const groups = new Map();
+  for (const key of keys) {
+    const parsed = parseKey(key);
+    const bucket = bucketFor(parsed?.purpose ?? null);
+    if (!groups.has(bucket)) groups.set(bucket, []);
+    groups.get(bucket).push(key);
+  }
+
   let deleted = 0;
-  for (let start = 0; start < keys.length; start += 1000) {
-    const batch = keys.slice(start, start + 1000);
-    if (!batch.length) continue;
-    await getClient().send(
-      new DeleteObjectsCommand({
-        Bucket: bucket,
-        Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
-      }),
-    );
-    deleted += batch.length;
+  for (const [bucket, bucketKeys] of groups) {
+    for (let start = 0; start < bucketKeys.length; start += 1000) {
+      const batch = bucketKeys.slice(start, start + 1000);
+      if (!batch.length) continue;
+      await getClient().send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+      deleted += batch.length;
+    }
   }
   return deleted;
 };
 
 const deletePrefix = async (prefix) => {
-  const bucket = required('R2_BUCKET_PUBLIC');
+  const bucket = bucketFor(purposeForPrefix(prefix));
   let continuationToken;
   let deleted = 0;
 
@@ -274,15 +305,22 @@ const deleteUserObjects = async (userId) => {
   return deleted;
 };
 
-const resolveMediaUrl = (value) => {
+const resolveMediaUrl = async (value) => {
   if (!value) return null;
   if (/^https?:\/\//i.test(value)) return value;
-  return parseKey(value) ? publicUrl(value) : value;
+  const parsed = parseKey(value);
+  if (!parsed) return value;
+  if (parsed.purpose === 'scan' && privateScanBucket()) {
+    const command = new GetObjectCommand({ Bucket: privateScanBucket(), Key: value });
+    return getSignedUrl(getClient(), command, { expiresIn: SIGNED_URL_TTL });
+  }
+  return publicUrl(value);
 };
 
 module.exports = {
   PURPOSES,
   isConfigured,
+  isScanPrivate: () => Boolean(privateScanBucket()),
   getPurpose,
   buildKey,
   parseKey,

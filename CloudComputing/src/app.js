@@ -17,9 +17,14 @@ const allowedOrigins = (process.env.CORS_ORIGINS || '')
 app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
-  origin: (origin, callback) => callback(null, allowedOrigins.length === 0 || !origin || allowedOrigins.includes(origin)),
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    return callback(null, allowedOrigins.includes(origin));
+  },
 }));
-if (allowedOrigins.length === 0) logger.warn('CORS_ORIGINS is not set: every origin is allowed');
+if (allowedOrigins.length === 0) {
+  logger.warn('CORS_ORIGINS is not set: browser cross-origin requests are denied');
+}
 app.use(compression());
 app.use(pinoHttp({ logger }));
 

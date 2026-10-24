@@ -6,10 +6,14 @@ const community = require('./community.service');
 const logger = require('../../shared/logger');
 const r2 = require('../../shared/r2');
 const { isUuid } = require('../../shared/id');
-const { postBodySchema, addCommentSchema, addReplySchema } = require('./community.schema');
+const { createPostSchema, updatePostSchema, addCommentSchema, addReplySchema } = require('./community.schema');
 
 const createPost = guard('Error in createPost', 'Failed to create post', async (req, res) => {
-  const { title, content, imageKey } = postBodySchema.parse(req.body);
+  const parsed = createPostSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
+  }
+  const { title, content, imageKey } = parsed.data;
 
   if (imageKey) {
     if (!r2.isOwnedKey(imageKey, 'post', req.user.id)) {
@@ -41,7 +45,11 @@ const updatePost = guard('Error in updatePost', 'Failed to update post', async (
     return fail(res, 404, 'NOT_FOUND', 'Post not found or you do not have permission to edit this post');
   }
 
-  const { title, content, imageKey } = postBodySchema.parse(req.body);
+  const parsed = updatePostSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
+  }
+  const { title, content, imageKey } = parsed.data;
 
   if (imageKey) {
     if (!r2.isOwnedKey(imageKey, 'post', user.id)) {

@@ -1,16 +1,10 @@
 // Unit test articles.controller: mock service; jalankan via `npm test`.
-jest.mock('../../../shared/urlSafety', () => ({
-  assertPublicHttpUrl: jest.fn(),
-}));
-
 jest.mock('../articles.service', () => ({
   getArticleById: jest.fn(),
   getAllArticles: jest.fn(),
-  fetchAndSaveFromUrl: jest.fn(),
 }));
 
 const articlesService = require('../articles.service');
-const { assertPublicHttpUrl } = require('../../../shared/urlSafety');
 const controller = require('../articles.controller');
 
 const fakeRes = () => {
@@ -33,7 +27,6 @@ const call = (handler, req) => {
 
 beforeEach(() => {
   jest.resetAllMocks();
-  assertPublicHttpUrl.mockImplementation(async (value) => new URL(value));
 });
 
 describe('getArticleById', () => {
@@ -58,69 +51,14 @@ describe('getArticleById', () => {
 });
 
 describe('getAllArticles', () => {
-  test('200 data list', async () => {
+  test('200 data list + default pagination', async () => {
     articlesService.getAllArticles.mockResolvedValue([{ id: 1 }, { id: 2 }]);
 
     const res = await call(controller.getAllArticles, {});
 
+    expect(articlesService.getAllArticles).toHaveBeenCalledWith({ limit: 10, offset: 0 });
     expect(res.statusCode).toBe(200);
     expect(res.body.data).toHaveLength(2);
     expect(res.body.message).toBe('Articles fetched successfully');
-  });
-});
-
-describe('getArticleFromUrl', () => {
-  test('url kosong → 400 "URL parameter is required"', async () => {
-    const res = await call(controller.getArticleFromUrl, { params: {} });
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error.message).toBe('URL parameter is required');
-    expect(articlesService.fetchAndSaveFromUrl).not.toHaveBeenCalled();
-  });
-
-  test('URL privat → 400 dan service tidak dipanggil', async () => {
-    assertPublicHttpUrl.mockRejectedValueOnce(Object.assign(new Error('private'), { code: 'UNSAFE_URL' }));
-
-    const res = await call(controller.getArticleFromUrl, { params: { url: 'http://127.0.0.1/admin' } });
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error.code).toBe('VALIDATION_ERROR');
-    expect(res.body.error.message).toBe('URL must be a public http(s) address');
-    expect(articlesService.fetchAndSaveFromUrl).not.toHaveBeenCalled();
-  });
-
-  test('tanpa protokol → auto https:// didepan', async () => {
-    articlesService.fetchAndSaveFromUrl.mockResolvedValue({ articleId: 9 });
-
-    await call(controller.getArticleFromUrl, { params: { url: 'contoh.com/a' } });
-
-    expect(articlesService.fetchAndSaveFromUrl).toHaveBeenCalledWith('https://contoh.com/a');
-  });
-
-  test('scrape gagal → 500 pesan dari service', async () => {
-    articlesService.fetchAndSaveFromUrl.mockResolvedValue({ message: 'Failed to scrape article' });
-
-    const res = await call(controller.getArticleFromUrl, { params: { url: 'https://contoh.com/a' } });
-
-    expect(res.statusCode).toBe(500);
-    expect(res.body.error.message).toBe('Failed to scrape article');
-  });
-
-  test('scrape ok → 200 articleId', async () => {
-    articlesService.fetchAndSaveFromUrl.mockResolvedValue({ articleId: 9 });
-
-    const res = await call(controller.getArticleFromUrl, { params: { url: 'https://contoh.com/a' } });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body.data.articleId).toBe(9);
-    expect(res.body.message).toBe('Article scraped and saved successfully');
-  });
-
-  test('error lain (mis. tanggal invalid) → 500 "Failed to scrape and save article"', async () => {
-    articlesService.fetchAndSaveFromUrl.mockRejectedValue(new Error('Invalid Date'));
-
-    const res = await call(controller.getArticleFromUrl, { params: { url: 'https://contoh.com/a' } });
-
-    expect(res.statusCode).toBe(500);
-    expect(res.body.error.message).toBe('Failed to scrape and save article');
   });
 });
