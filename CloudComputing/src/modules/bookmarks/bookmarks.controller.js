@@ -39,7 +39,7 @@ const getBookmarkById = guard('Error fetching bookmark', 'Failed to retrieve boo
     return fail(res, 400, 'VALIDATION_ERROR', 'Bookmark ID is required');
   }
 
-  const bookmark = await bookmarkService.getBookmarkById(req.user.id, Number(parsed.data.id));
+  const bookmark = await bookmarkService.getBookmarkById(req.user.id, parsed.data.id);
   if (!bookmark) {
     return fail(res, 404, 'NOT_FOUND', 'Bookmark not found');
   }

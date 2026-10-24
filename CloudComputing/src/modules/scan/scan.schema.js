@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const { UUID_PATTERN } = require('../../shared/id');
 
 const saveScanSchema = z.object({
   imageKey: z
@@ -18,10 +19,7 @@ const saveScanSchema = z.object({
 });
 
 const scanUserIdSchema = z.object({
-  userId: z.coerce
-    .number({ message: 'User ID diperlukan!' })
-    .int()
-    .positive({ message: 'User ID diperlukan!' }),
+  userId: z.string().regex(UUID_PATTERN, 'User ID diperlukan!'),
 });
 
 module.exports = { saveScanSchema, scanUserIdSchema };

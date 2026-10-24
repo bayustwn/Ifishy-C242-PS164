@@ -16,6 +16,9 @@ jest.mock('@prisma/client', () => ({ PrismaClient: jest.fn(() => mockPrisma) }))
 
 const articlesService = require('../articles.service');
 
+const ARTICLE_ID = '10000000-0000-4000-8000-000000000003';
+const NEW_ARTICLE_ID = '10000000-0000-4000-8000-000000000077';
+
 const fakeBrowserFor = (evaluateResult) => {
   const fakePage = {
     setRequestInterception: jest.fn().mockResolvedValue(),
@@ -34,25 +37,25 @@ beforeEach(() => {
 });
 
 describe('getArticleById', () => {
-  test('id numerik ditemukan → row snake_case (published_at/cover_image)', async () => {
+  test('id UUID ditemukan → row snake_case (published_at/cover_image)', async () => {
     mockPrisma.article.findUnique.mockResolvedValue({
-      id: 3, title: 'T', content: 'C', author: 'A', publishedAt: new Date('2024-05-01T08:00:00Z'), coverImage: 'c.jpg',
+      id: ARTICLE_ID, title: 'T', content: 'C', author: 'A', publishedAt: new Date('2024-05-01T08:00:00Z'), coverImage: 'c.jpg',
     });
 
-    const row = await articlesService.getArticleById('3');
+    const row = await articlesService.getArticleById(ARTICLE_ID);
 
-    expect(mockPrisma.article.findUnique).toHaveBeenCalledWith({ where: { id: 3 } });
-    expect(row).toEqual({ id: 3, title: 'T', content: 'C', author: 'A', published_at: new Date('2024-05-01T08:00:00Z'), cover_image: 'c.jpg' });
+    expect(mockPrisma.article.findUnique).toHaveBeenCalledWith({ where: { id: ARTICLE_ID } });
+    expect(row).toEqual({ id: ARTICLE_ID, title: 'T', content: 'C', author: 'A', published_at: new Date('2024-05-01T08:00:00Z'), cover_image: 'c.jpg' });
   });
 
-  test('id bukan angka → tidak memquery, balik null', async () => {
+  test('id bukan UUID → tidak memquery, balik null', async () => {
     expect(await articlesService.getArticleById('abc')).toBeNull();
     expect(mockPrisma.article.findUnique).not.toHaveBeenCalled();
   });
 
   test('tidak ditemukan → null', async () => {
     mockPrisma.article.findUnique.mockResolvedValue(null);
-    expect(await articlesService.getArticleById('999')).toBeNull();
+    expect(await articlesService.getArticleById('10000000-0000-4000-8000-000000000999')).toBeNull();
   });
 });
 
@@ -74,7 +77,7 @@ describe('fetchAndSaveFromUrl', () => {
     const { fakePage, fakeBrowser } = fakeBrowserFor({
       title: 'T', content: 'C', author: 'A', coverImage: 'c.jpg', images: [], publicationTime: '2024-05-01T08:00:00Z',
     });
-    mockPrisma.article.create.mockResolvedValue({ id: 77 });
+    mockPrisma.article.create.mockResolvedValue({ id: NEW_ARTICLE_ID });
 
     const out = await articlesService.fetchAndSaveFromUrl('https://contoh.com/isi');
 
@@ -84,7 +87,7 @@ describe('fetchAndSaveFromUrl', () => {
     expect(mockPrisma.article.create).toHaveBeenCalledWith({
       data: { title: 'T', content: 'C', author: 'A', coverImage: 'c.jpg', publishedAt: new Date('2024-05-01T08:00:00Z') },
     });
-    expect(out).toEqual({ articleId: 77 });
+    expect(out).toEqual({ articleId: NEW_ARTICLE_ID });
     expect(fakeBrowser.close).toHaveBeenCalled();
   });
 

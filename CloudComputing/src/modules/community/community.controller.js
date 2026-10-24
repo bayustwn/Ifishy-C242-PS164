@@ -5,9 +5,8 @@ const { ok, fail } = require('../../shared/response');
 const community = require('./community.service');
 const logger = require('../../shared/logger');
 const r2 = require('../../shared/r2');
+const { isUuid } = require('../../shared/id');
 const { postBodySchema, addCommentSchema, addReplySchema } = require('./community.schema');
-
-const isNumericId = (value) => /^\d+$/.test(String(value));
 
 const createPost = guard('Error in createPost', 'Failed to create post', async (req, res) => {
   const { title, content, imageKey } = postBodySchema.parse(req.body);
@@ -32,11 +31,11 @@ const updatePost = guard('Error in updatePost', 'Failed to update post', async (
   const { postId } = req.params;
   const { user } = req;
 
-  if (!isNumericId(postId)) {
+  if (!isUuid(postId)) {
     return fail(res, 404, 'NOT_FOUND', 'Post not found or you do not have permission to edit this post');
   }
 
-  const existingPost = await community.findPostByIdAndUser(Number(postId), user.id);
+  const existingPost = await community.findPostByIdAndUser(postId, user.id);
 
   if (!existingPost) {
     return fail(res, 404, 'NOT_FOUND', 'Post not found or you do not have permission to edit this post');
@@ -57,7 +56,7 @@ const updatePost = guard('Error in updatePost', 'Failed to update post', async (
 
   const imageUrl = imageKey === undefined ? existingPost.imageUrl : (imageKey ?? null);
 
-  await community.updatePost(Number(postId), user.id, { title, content }, imageUrl);
+  await community.updatePost(postId, user.id, { title, content }, imageUrl);
 
   if (existingPost.imageUrl && existingPost.imageUrl !== imageUrl) {
     await r2.deleteOwned(existingPost.imageUrl, 'post', user.id).catch((error) => {
@@ -79,11 +78,11 @@ const getPosts = guard('Error in getPosts', 'Failed to retrieve posts', async (r
 const getPostById = guard('Error in getPostById', 'Failed to retrieve the post', async (req, res) => {
   const { id } = req.params;
 
-  if (!isNumericId(id)) {
+  if (!isUuid(id)) {
     return fail(res, 404, 'NOT_FOUND', 'Post not found');
   }
 
-  const post = await community.getPostById(Number(id));
+  const post = await community.getPostById(id);
 
   if (!post) {
     return fail(res, 404, 'NOT_FOUND', 'Post not found');
@@ -94,9 +93,12 @@ const getPostById = guard('Error in getPostById', 'Failed to retrieve the post',
 
 const addShareToPost = guard('Error adding share to post', 'Failed to share post', async (req, res) => {
   const { postId } = req.params;
+  if (!isUuid(postId)) {
+    return fail(res, 404, 'NOT_FOUND', 'Post not found');
+  }
   const userId = req.user.id;
 
-  const result = await community.addShareToPost(Number(postId), userId);
+  const result = await community.addShareToPost(postId, userId);
 
   if (result === 'already_shared') {
     return fail(res, 400, 'ALREADY_SHARED', 'You have already shared this post');
@@ -109,7 +111,7 @@ const addComment = guard('Error in addComment', 'Failed to add comment', async (
   const { content } = req.body;
   const { postId } = req.params;
 
-  if (!postId) {
+  if (!isUuid(postId)) {
     return fail(res, 400, 'VALIDATION_ERROR', 'Post ID is required');
   }
 
@@ -118,29 +120,30 @@ const addComment = guard('Error in addComment', 'Failed to add comment', async (
     return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
   }
 
-  await community.addComment(Number(postId), req.user.id, parsed.data.content);
+  await community.addComment(postId, req.user.id, parsed.data.content);
 
   return ok(res, null, 'Comment added successfully!', 201);
 });
 
 const getComments = guard('Error in getComments', 'Failed to retrieve comments', async (req, res) => {
-  const rawPostId = req.params.postId;
-  const postId = isNumericId(rawPostId) ? Number(rawPostId) : -1;
-  const userId = req.user.id;
+  const { postId } = req.params;
+  if (!isUuid(postId)) {
+    return ok(res, []);
+  }
 
-  const comments = await community.getComments(postId, userId, parsePagination(req.query));
+  const comments = await community.getComments(postId, req.user.id, parsePagination(req.query));
 
   return ok(res, comments);
 });
 
 const getCommentsById = guard('Error in getCommentsById', 'Failed to retrieve comment', async (req, res) => {
   const { commentId } = req.params;
-  if (!isNumericId(commentId)) {
+  if (!isUuid(commentId)) {
     return fail(res, 404, 'NOT_FOUND', 'Comment not found');
   }
 
   const userId = req.user.id;
-  const comment = await community.getCommentsById(Number(commentId), userId);
+  const comment = await community.getCommentsById(commentId, userId);
 
   if (!comment) {
     return fail(res, 404, 'NOT_FOUND', 'Comment not found');
@@ -154,14 +157,20 @@ const addReplyToComment = guard('Error adding reply to comment', 'Failed to add 
   if (!parsed.success) {
     return fail(res, 400, 'VALIDATION_ERROR', firstIssueMessage(parsed));
   }
+  if (!isUuid(req.params.commentId)) {
+    return fail(res, 404, 'NOT_FOUND', 'Comment not found');
+  }
 
-  await community.addReplyToComment(Number(req.params.commentId), req.user.id, parsed.data.content);
+  await community.addReplyToComment(req.params.commentId, req.user.id, parsed.data.content);
 
   return ok(res, null, 'Reply added successfully', 201);
 });
 
 const addLikeToComment = guard('Error adding like to comment', 'Failed to add like to comment', async (req, res) => {
-  const result = await community.addLikeToComment(Number(req.params.commentId), req.user.id);
+  if (!isUuid(req.params.commentId)) {
+    return fail(res, 404, 'NOT_FOUND', 'Comment not found');
+  }
+  const result = await community.addLikeToComment(req.params.commentId, req.user.id);
 
   if (result === 'already_liked') {
     return fail(res, 400, 'ALREADY_LIKED', 'You have already liked this comment');
@@ -171,7 +180,10 @@ const addLikeToComment = guard('Error adding like to comment', 'Failed to add li
 });
 
 const removeLikeFromComment = guard('Error removing like from comment', 'Failed to remove like from comment', async (req, res) => {
-  const result = await community.removeLikeFromComment(Number(req.params.commentId), req.user.id);
+  if (!isUuid(req.params.commentId)) {
+    return fail(res, 404, 'NOT_FOUND', 'Comment not found');
+  }
+  const result = await community.removeLikeFromComment(req.params.commentId, req.user.id);
 
   if (result === 'not_liked') {
     return fail(res, 400, 'NOT_LIKED', 'You have not liked this comment yet');
@@ -187,7 +199,10 @@ const getLikedCommentsByUser = guard('Error in getLikedCommentsByUser', 'Failed 
 });
 
 const addUpvoteToPost = guard('Error adding upvote', 'Failed to add upvote', async (req, res) => {
-  const result = await community.addUpvoteToPost(Number(req.params.postId), req.user.id);
+  if (!isUuid(req.params.postId)) {
+    return fail(res, 404, 'NOT_FOUND', 'Post not found');
+  }
+  const result = await community.addUpvoteToPost(req.params.postId, req.user.id);
 
   if (result === 'already_upvoted') {
     return fail(res, 400, 'ALREADY_UPVOTED', 'You have already upvoted this post');
@@ -197,7 +212,10 @@ const addUpvoteToPost = guard('Error adding upvote', 'Failed to add upvote', asy
 });
 
 const addDownvoteToPost = guard('Error adding downvote', 'Failed to add downvote', async (req, res) => {
-  const result = await community.addDownvoteToPost(Number(req.params.postId), req.user.id);
+  if (!isUuid(req.params.postId)) {
+    return fail(res, 404, 'NOT_FOUND', 'Post not found');
+  }
+  const result = await community.addDownvoteToPost(req.params.postId, req.user.id);
 
   if (result === 'already_downvoted') {
     return fail(res, 400, 'ALREADY_DOWNVOTED', 'You have already downvoted this post');
@@ -207,7 +225,10 @@ const addDownvoteToPost = guard('Error adding downvote', 'Failed to add downvote
 });
 
 const getVoteStatusById = guard('Error retrieving vote status', 'Failed to retrieve vote status', async (req, res) => {
-  const status = await community.getVoteStatusById(Number(req.params.postId), req.user.id);
+  if (!isUuid(req.params.postId)) {
+    return fail(res, 404, 'NOT_FOUND', 'Post not found');
+  }
+  const status = await community.getVoteStatusById(req.params.postId, req.user.id);
 
   if (status === 'no vote') {
     return ok(res, { vote_status: status }, 'User has not voted yet');
@@ -217,7 +238,10 @@ const getVoteStatusById = guard('Error retrieving vote status', 'Failed to retri
 });
 
 const removeUpvoteFromPost = guard('Error removing upvote', 'Failed to remove upvote', async (req, res) => {
-  const result = await community.removeUpvoteFromPost(Number(req.params.postId), req.user.id);
+  if (!isUuid(req.params.postId)) {
+    return fail(res, 404, 'NOT_FOUND', 'Post not found');
+  }
+  const result = await community.removeUpvoteFromPost(req.params.postId, req.user.id);
 
   if (result === 'not_upvote') {
     return fail(res, 400, 'NOT_UPVOTED', 'You have not upvoted this post yet');
@@ -227,7 +251,10 @@ const removeUpvoteFromPost = guard('Error removing upvote', 'Failed to remove up
 });
 
 const removeDownvoteFromPost = guard('Error removing downvote', 'Failed to remove downvote', async (req, res) => {
-  const result = await community.removeDownvoteFromPost(Number(req.params.postId), req.user.id);
+  if (!isUuid(req.params.postId)) {
+    return fail(res, 404, 'NOT_FOUND', 'Post not found');
+  }
+  const result = await community.removeDownvoteFromPost(req.params.postId, req.user.id);
 
   if (result === 'not_downvote') {
     return fail(res, 400, 'NOT_DOWNVOTED', 'You have not downvoted this post yet');

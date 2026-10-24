@@ -16,6 +16,12 @@ const r2 = require('../../../shared/r2');
 const usersService = require('../users.service');
 const controller = require('../users.controller');
 
+const USER_ID = '40000000-0000-4000-8000-000000000005';
+const PHOTO_USER_ID = '40000000-0000-4000-8000-000000000007';
+const OTHER_USER_ID = '40000000-0000-4000-8000-000000000008';
+const PHOTO_KEY = `avatars/${PHOTO_USER_ID}/p.jpg`;
+const OLD_PHOTO_KEY = `avatars/${PHOTO_USER_ID}/old.jpg`;
+
 const fakeRes = () => {
   const res = { statusCode: null, body: null };
   res.status = (code) => {
@@ -42,7 +48,7 @@ beforeEach(() => {
 
 describe('updateUser', () => {
   test('body tidak valid → 400 tanpa update', async () => {
-    const res = await call(controller.updateUser, { user: { id: 5 }, body: { email: 'bukan-email' } });
+    const res = await call(controller.updateUser, { user: { id: USER_ID }, body: { email: 'bukan-email' } });
     expect(res.statusCode).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
     expect(usersService.updateUser).not.toHaveBeenCalled();
@@ -52,19 +58,19 @@ describe('updateUser', () => {
     usersService.updateUser.mockResolvedValue('ok');
 
     const res = await call(controller.updateUser, {
-      user: { id: 5 },
+      user: { id: USER_ID },
       body: { username: 'baru' },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(usersService.updateUser).toHaveBeenCalledWith(5, { username: 'baru' });
+    expect(usersService.updateUser).toHaveBeenCalledWith(USER_ID, { username: 'baru' });
   });
 
   test('password lama salah → 400 "Incorrect password"', async () => {
     usersService.updateUser.mockResolvedValue('incorrect_password');
 
     const res = await call(controller.updateUser, {
-      user: { id: 5 },
+      user: { id: USER_ID },
       body: { password: 'salah', newPassword: 'baru123' },
     });
 
@@ -76,7 +82,7 @@ describe('updateUser', () => {
     usersService.updateUser.mockResolvedValue('conflict');
 
     const res = await call(controller.updateUser, {
-      user: { id: 5 },
+      user: { id: USER_ID },
       body: { username: 'dipakai' },
     });
 
@@ -86,7 +92,7 @@ describe('updateUser', () => {
 
   test('newPassword kurang dari 6 karakter → 400', async () => {
     const res = await call(controller.updateUser, {
-      user: { id: 5 },
+      user: { id: USER_ID },
       body: { password: 'lama', newPassword: '123' },
     });
 
@@ -98,26 +104,26 @@ describe('updateUser', () => {
 describe('deleteUserAccount', () => {
   test('sukses → 200; tidak ada → 404', async () => {
     usersService.deleteUserAccount.mockResolvedValueOnce('ok');
-    let res = await call(controller.deleteUserAccount, { user: { id: 5 } });
+    let res = await call(controller.deleteUserAccount, { user: { id: USER_ID } });
     expect(res.statusCode).toBe(200);
     expect(res.body.message).toBe('User account deleted successfully');
 
     usersService.deleteUserAccount.mockReset();
     usersService.deleteUserAccount.mockResolvedValueOnce('not_found');
-    res = await call(controller.deleteUserAccount, { user: { id: 5 } });
+    res = await call(controller.deleteUserAccount, { user: { id: USER_ID } });
     expect(res.statusCode).toBe(404);
   });
 });
 
 describe('uploadProfilePhoto', () => {
   test('imageKey tidak ada → 400', async () => {
-    const res = await call(controller.uploadProfilePhoto, { user: { id: 7 }, body: { userId: '1' } });
+    const res = await call(controller.uploadProfilePhoto, { user: { id: PHOTO_USER_ID }, body: { userId: '1' } });
     expect(res.statusCode).toBe(400);
     expect(res.body.error.message).toBe('imageKey is required');
   });
 
   test('imageKey milik user lain → 400 tanpa update DB', async () => {
-    const res = await call(controller.uploadProfilePhoto, { user: { id: 7 }, body: { imageKey: 'avatars/8/p.jpg' } });
+    const res = await call(controller.uploadProfilePhoto, { user: { id: PHOTO_USER_ID }, body: { imageKey: `avatars/${OTHER_USER_ID}/p.jpg` } });
     expect(res.statusCode).toBe(400);
     expect(usersService.replaceProfilePhoto).not.toHaveBeenCalled();
   });
@@ -126,8 +132,8 @@ describe('uploadProfilePhoto', () => {
     r2.verifyUpload.mockRejectedValue(new Error('not found'));
 
     const res = await call(controller.uploadProfilePhoto, {
-      user: { id: 7 },
-      body: { imageKey: 'avatars/7/p.jpg' },
+      user: { id: PHOTO_USER_ID },
+      body: { imageKey: PHOTO_KEY },
     });
 
     expect(res.statusCode).toBe(400);
@@ -139,25 +145,25 @@ describe('uploadProfilePhoto', () => {
     usersService.replaceProfilePhoto.mockResolvedValue(null);
 
     const res = await call(controller.uploadProfilePhoto, {
-      user: { id: 7 },
-      body: { imageKey: 'avatars/7/p.jpg' },
+      user: { id: PHOTO_USER_ID },
+      body: { imageKey: PHOTO_KEY },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.data.photoUrl).toBe('avatars/7/p.jpg');
-    expect(usersService.replaceProfilePhoto).toHaveBeenCalledWith(7, 'avatars/7/p.jpg');
+    expect(res.body.data.photoUrl).toBe(PHOTO_KEY);
+    expect(usersService.replaceProfilePhoto).toHaveBeenCalledWith(PHOTO_USER_ID, PHOTO_KEY);
   });
 
   test('foto lama R2 dihapus setelah ganti', async () => {
-    usersService.replaceProfilePhoto.mockResolvedValue('avatars/7/old.jpg');
+    usersService.replaceProfilePhoto.mockResolvedValue(OLD_PHOTO_KEY);
 
     const res = await call(controller.uploadProfilePhoto, {
-      user: { id: 7 },
-      body: { imageKey: 'avatars/7/p.jpg' },
+      user: { id: PHOTO_USER_ID },
+      body: { imageKey: PHOTO_KEY },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(r2.deleteOwned).toHaveBeenCalledWith('avatars/7/old.jpg', 'avatar', 7);
+    expect(r2.deleteOwned).toHaveBeenCalledWith(OLD_PHOTO_KEY, 'avatar', PHOTO_USER_ID);
   });
 });
 
@@ -172,11 +178,11 @@ describe('getDashboardData / getUserProfile', () => {
   });
 
   test('ditemukan → 200 shape snake_case', async () => {
-    usersService.getProfileByEmail.mockResolvedValue({ id: 5, username: 'a', email: 'a@t.loc', profile_photo: 'p.jpg' });
+    usersService.getProfileByEmail.mockResolvedValue({ id: USER_ID, username: 'a', email: 'a@t.loc', profile_photo: 'p.jpg' });
 
     const res = await call(controller.getUserProfile, { params: { email: 'a@t.loc' } });
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.data).toEqual({ id: 5, username: 'a', email: 'a@t.loc', profile_photo: 'p.jpg' });
+    expect(res.body.data).toEqual({ id: USER_ID, username: 'a', email: 'a@t.loc', profile_photo: 'p.jpg' });
   });
 });

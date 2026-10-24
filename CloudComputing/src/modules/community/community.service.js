@@ -1,4 +1,5 @@
 const prisma = require('../../shared/prisma');
+const { isUuid } = require('../../shared/id');
 const logger = require('../../shared/logger');
 const { publicUrl } = require('../../shared/r2');
 const { sliceArgs } = require('../../shared/pagination');
@@ -299,7 +300,7 @@ const addLikeToComment = async (commentId, userId) => {
 };
 
 const removeLikeFromComment = async (commentId, userId) => {
-  if (Number.isNaN(Number(commentId))) return 'not_liked';
+  if (!isUuid(commentId)) return 'not_liked';
   const existingLike = await prisma.like.findUnique({
     where: { commentId_userId: { commentId, userId } },
     select: { id: true },
@@ -370,13 +371,13 @@ const addDownvoteToPost = async (postId, userId) => {
 };
 
 const getVoteStatusById = async (postId, userId) => {
-  if (Number.isNaN(Number(postId))) return 'no vote';
+  if (!isUuid(postId)) return 'no vote';
   const existingVote = await findVote(postId, userId);
   return existingVote ? existingVote.voteType : 'no vote';
 };
 
 const removeVoteFromPost = async (postId, userId, type) => {
-  if (Number.isNaN(Number(postId))) return `not_${type}`;
+  if (!isUuid(postId)) return `not_${type}`;
   const existingVote = await findVote(postId, userId);
   if (!existingVote || existingVote.voteType !== type) return `not_${type}`;
 

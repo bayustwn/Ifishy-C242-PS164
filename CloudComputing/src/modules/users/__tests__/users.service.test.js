@@ -20,13 +20,19 @@ const bcrypt = require('bcrypt');
 const r2 = require('../../../shared/r2');
 const usersService = require('../users.service');
 
+const USER_ID = '40000000-0000-4000-8000-000000000005';
+const PHOTO_USER_ID = '40000000-0000-4000-8000-000000000007';
+const PHOTO_KEY = `avatars/${PHOTO_USER_ID}/a.jpg`;
+const OLD_PHOTO_KEY = `avatars/${PHOTO_USER_ID}/old.jpg`;
+const NEW_PHOTO_KEY = `avatars/${PHOTO_USER_ID}/new.jpg`;
+
 beforeEach(() => {
   jest.resetAllMocks();
   r2.deleteUserObjects.mockResolvedValue(0);
 });
 
 describe('updateUser', () => {
-  const current = { id: 5, username: 'lama', email: 'lama@t.loc', password: 'hashed-lama' };
+  const current = { id: USER_ID, username: 'lama', email: 'lama@t.loc', password: 'hashed-lama' };
 
   test('user tidak ada → "not_found"', async () => {
     mockPrisma.user.findUnique.mockResolvedValue(null);
@@ -37,11 +43,11 @@ describe('updateUser', () => {
     mockPrisma.user.findUnique.mockResolvedValue(current);
     mockPrisma.user.update.mockResolvedValue(current);
 
-    const result = await usersService.updateUser(5, { username: 'baru' });
+    const result = await usersService.updateUser(USER_ID, { username: 'baru' });
 
     expect(result).toBe('ok');
     expect(mockPrisma.user.update).toHaveBeenCalledWith({
-      where: { id: 5 },
+      where: { id: USER_ID },
       data: { username: 'baru', email: 'lama@t.loc', password: 'hashed-lama' },
     });
     expect(bcrypt.compare).not.toHaveBeenCalled();
@@ -51,7 +57,7 @@ describe('updateUser', () => {
     mockPrisma.user.findUnique.mockResolvedValue(current);
     bcrypt.compare.mockResolvedValue(false);
 
-    const result = await usersService.updateUser(5, { password: 'salah', newPassword: 'baru' });
+    const result = await usersService.updateUser(USER_ID, { password: 'salah', newPassword: 'baru' });
 
     expect(result).toBe('incorrect_password');
     expect(bcrypt.hash).not.toHaveBeenCalled();
@@ -63,10 +69,10 @@ describe('updateUser', () => {
     bcrypt.compare.mockResolvedValue(true);
     bcrypt.hash.mockResolvedValue('hashed-baru');
 
-    await usersService.updateUser(5, { password: 'benar', newPassword: 'baru' });
+    await usersService.updateUser(USER_ID, { password: 'benar', newPassword: 'baru' });
 
     expect(mockPrisma.user.update).toHaveBeenCalledWith({
-      where: { id: 5 },
+      where: { id: USER_ID },
       data: { username: 'lama', email: 'lama@t.loc', password: 'hashed-baru' },
     });
   });
@@ -75,14 +81,14 @@ describe('updateUser', () => {
     mockPrisma.user.findUnique.mockResolvedValue(current);
     bcrypt.compare.mockResolvedValue(false);
 
-    expect(await usersService.updateUser(5, { newPassword: 'baru' })).toBe('incorrect_password');
+    expect(await usersService.updateUser(USER_ID, { newPassword: 'baru' })).toBe('incorrect_password');
   });
 
   test('username/email duplikat → "conflict"', async () => {
     mockPrisma.user.findUnique.mockResolvedValue(current);
     mockPrisma.user.update.mockRejectedValue(Object.assign(new Error('duplicate'), { code: 'P2002' }));
 
-    expect(await usersService.updateUser(5, { username: 'dipakai' })).toBe('conflict');
+    expect(await usersService.updateUser(USER_ID, { username: 'dipakai' })).toBe('conflict');
   });
 });
 
@@ -93,16 +99,16 @@ describe('deleteUserAccount', () => {
     expect(await usersService.deleteUserAccount(999)).toBe('not_found');
     expect(r2.deleteUserObjects).not.toHaveBeenCalled();
 
-    expect(await usersService.deleteUserAccount(5)).toBe('ok');
-    expect(mockPrisma.user.deleteMany).toHaveBeenCalledWith({ where: { id: 5 } });
-    expect(r2.deleteUserObjects).toHaveBeenCalledWith(5);
+    expect(await usersService.deleteUserAccount(USER_ID)).toBe('ok');
+    expect(mockPrisma.user.deleteMany).toHaveBeenCalledWith({ where: { id: USER_ID } });
+    expect(r2.deleteUserObjects).toHaveBeenCalledWith(USER_ID);
   });
 
   test('cleanup storage gagal → tetap "ok"', async () => {
     mockPrisma.user.deleteMany.mockResolvedValue({ count: 1 });
     r2.deleteUserObjects.mockRejectedValue(new Error('r2 down'));
 
-    expect(await usersService.deleteUserAccount(5)).toBe('ok');
+    expect(await usersService.deleteUserAccount(USER_ID)).toBe('ok');
   });
 });
 
@@ -110,18 +116,18 @@ describe('replaceProfilePhoto', () => {
   test('user tidak ada → null tanpa update', async () => {
     mockPrisma.user.findUnique.mockResolvedValue(null);
 
-    expect(await usersService.replaceProfilePhoto(7, 'avatars/7/a.jpg')).toBeNull();
+    expect(await usersService.replaceProfilePhoto(PHOTO_USER_ID, PHOTO_KEY)).toBeNull();
     expect(mockPrisma.user.update).not.toHaveBeenCalled();
   });
 
   test('user ada → simpan key baru dan kembalikan foto lama', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({ profilePhoto: 'avatars/7/old.jpg' });
+    mockPrisma.user.findUnique.mockResolvedValue({ profilePhoto: OLD_PHOTO_KEY });
     mockPrisma.user.update.mockResolvedValue({});
 
-    expect(await usersService.replaceProfilePhoto(7, 'avatars/7/new.jpg')).toBe('avatars/7/old.jpg');
+    expect(await usersService.replaceProfilePhoto(PHOTO_USER_ID, NEW_PHOTO_KEY)).toBe(OLD_PHOTO_KEY);
     expect(mockPrisma.user.update).toHaveBeenCalledWith({
-      where: { id: 7 },
-      data: { profilePhoto: 'avatars/7/new.jpg' },
+      where: { id: PHOTO_USER_ID },
+      data: { profilePhoto: NEW_PHOTO_KEY },
     });
   });
 });
@@ -129,7 +135,7 @@ describe('replaceProfilePhoto', () => {
 describe('getDashboardByEmail', () => {
   test('ditemukan → shape profile_photo snake_case', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
-      id: 5, username: 'a', email: 'a@t.loc', profilePhoto: 'http://x/p.jpg',
+      id: USER_ID, username: 'a', email: 'a@t.loc', profilePhoto: 'http://x/p.jpg',
     });
 
     const row = await usersService.getDashboardByEmail('a@t.loc');
@@ -138,7 +144,7 @@ describe('getDashboardByEmail', () => {
       where: { email: 'a@t.loc' },
       select: { id: true, username: true, email: true, profilePhoto: true },
     });
-    expect(row).toEqual({ id: 5, username: 'a', email: 'a@t.loc', profile_photo: 'http://x/p.jpg' });
+    expect(row).toEqual({ id: USER_ID, username: 'a', email: 'a@t.loc', profile_photo: 'http://x/p.jpg' });
   });
 
   test('tidak ada → null', async () => {

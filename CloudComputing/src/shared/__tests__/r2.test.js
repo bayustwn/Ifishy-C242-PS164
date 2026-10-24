@@ -1,42 +1,45 @@
 const r2 = require('../r2');
 
+const USER_ID = '00000000-0000-4000-8000-000000000009';
+const OTHER_ID = '00000000-0000-4000-8000-000000000010';
+
 describe('r2 key helpers', () => {
   test('buildKey memakai prefix purpose, userId, dan ekstensi dari contentType', () => {
-    const key = r2.buildKey('post', 9, 'image/jpeg');
-    expect(key).toMatch(/^posts\/9\/[0-9a-f-]{36}\.jpg$/);
+    const key = r2.buildKey('post', USER_ID, 'image/jpeg');
+    expect(key).toMatch(/^posts\/00000000-0000-4000-8000-000000000009\/[0-9a-f-]{36}\.jpg$/);
   });
 
   test('buildKey menolak contentType yang tidak didukung', () => {
-    expect(() => r2.buildKey('post', 9, 'application/pdf')).toThrow('Unsupported upload type');
+    expect(() => r2.buildKey('post', USER_ID, 'application/pdf')).toThrow('Unsupported upload type');
   });
 
   test('parseKey memetakan purpose dan userId', () => {
-    expect(r2.parseKey('scans/12/abc.jpg')).toEqual({
-      purpose: 'scan', userId: 12, filename: 'abc', ext: 'jpg',
+    expect(r2.parseKey('scans/00000000-0000-4000-8000-000000000009/abc.jpg')).toEqual({
+      purpose: 'scan', userId: USER_ID, filename: 'abc', ext: 'jpg',
     });
   });
 
   test('parseKey menolak key dengan path traversal atau format asing', () => {
     expect(r2.parseKey('../etc/passwd')).toBeNull();
-    expect(r2.parseKey('scans/12/../x.jpg')).toBeNull();
-    expect(r2.parseKey('scans/12/x.jpg?x=1')).toBeNull();
+    expect(r2.parseKey('scans/00000000-0000-4000-8000-000000000009/../x.jpg')).toBeNull();
+    expect(r2.parseKey('scans/00000000-0000-4000-8000-000000000009/x.jpg?x=1')).toBeNull();
   });
 
   test('isOwnedKey hanya cocok untuk purpose dan userId yang sama', () => {
-    expect(r2.isOwnedKey('posts/9/a.png', 'post', 9)).toBe(true);
-    expect(r2.isOwnedKey('posts/9/a.png', 'post', 10)).toBe(false);
-    expect(r2.isOwnedKey('posts/9/a.png', 'avatars', 9)).toBe(false);
-    expect(r2.isOwnedKey(null, 'post', 9)).toBe(false);
+    expect(r2.isOwnedKey('posts/00000000-0000-4000-8000-000000000009/a.png', 'post', USER_ID)).toBe(true);
+    expect(r2.isOwnedKey('posts/00000000-0000-4000-8000-000000000009/a.png', 'post', OTHER_ID)).toBe(false);
+    expect(r2.isOwnedKey('posts/00000000-0000-4000-8000-000000000009/a.png', 'avatars', USER_ID)).toBe(false);
+    expect(r2.isOwnedKey(null, 'post', USER_ID)).toBe(false);
   });
 
   test('publicUrl meneruskan URL lama dan menyusun URL dari key', () => {
     const original = process.env.R2_PUBLIC_BASE_URL;
     delete process.env.R2_PUBLIC_BASE_URL;
     expect(r2.publicUrl('http://localhost:9080/uploads/a.png')).toBe('http://localhost:9080/uploads/a.png');
-    expect(r2.publicUrl('posts/9/a.png')).toBe('posts/9/a.png');
+    expect(r2.publicUrl('posts/00000000-0000-4000-8000-000000000009/a.png')).toBe(`posts/${USER_ID}/a.png`);
 
     process.env.R2_PUBLIC_BASE_URL = 'https://media.example.com/';
-    expect(r2.publicUrl('posts/9/a.png')).toBe('https://media.example.com/posts/9/a.png');
+    expect(r2.publicUrl('posts/00000000-0000-4000-8000-000000000009/a.png')).toBe('https://media.example.com/posts/00000000-0000-4000-8000-000000000009/a.png');
 
     if (original === undefined) delete process.env.R2_PUBLIC_BASE_URL;
     else process.env.R2_PUBLIC_BASE_URL = original;
@@ -60,7 +63,7 @@ describe('r2 key helpers', () => {
   test('resolveMediaUrl memakai URL publik untuk semua purpose, termasuk scan', () => {
     const original = process.env.R2_PUBLIC_BASE_URL;
     process.env.R2_PUBLIC_BASE_URL = 'https://media.example.com';
-    expect(r2.resolveMediaUrl('scans/12/a.jpg')).toBe('https://media.example.com/scans/12/a.jpg');
+    expect(r2.resolveMediaUrl('scans/00000000-0000-4000-8000-000000000009/a.jpg')).toBe('https://media.example.com/scans/00000000-0000-4000-8000-000000000009/a.jpg');
     expect(r2.resolveMediaUrl('https://legacy.example/a.jpg')).toBe('https://legacy.example/a.jpg');
     expect(r2.resolveMediaUrl(null)).toBeNull();
 

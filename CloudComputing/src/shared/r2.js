@@ -9,6 +9,7 @@ const {
   ListObjectsV2Command,
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { isUuid } = require('./id');
 
 const MB = 1024 * 1024;
 const UPLOAD_URL_TTL = 300;
@@ -94,21 +95,23 @@ const getPurpose = (purpose) => PURPOSES[purpose] ?? null;
 const buildKey = (purpose, userId, contentType) => {
   const policy = PURPOSES[purpose];
   if (!policy || !EXTENSIONS[contentType]) throw new Error(`Unsupported upload type: ${contentType}`);
-  return `${policy.prefix}/${Number(userId)}/${randomUUID()}.${EXTENSIONS[contentType]}`;
+  const id = String(userId).toLowerCase();
+  if (!isUuid(id)) throw new Error('Invalid user ID');
+  return `${policy.prefix}/${id}/${randomUUID()}.${EXTENSIONS[contentType]}`;
 };
 
 const parseKey = (key) => {
   if (typeof key !== 'string') return null;
-  const match = /^(avatars|posts|scans)\/(\d+)\/([A-Za-z0-9-]+)\.([a-z0-9]+)$/.exec(key);
-  if (!match) return null;
+  const match = /^(avatars|posts|scans)\/([0-9a-f-]{36})\/([A-Za-z0-9-]+)\.([a-z0-9]+)$/i.exec(key);
+  if (!match || !isUuid(match[2])) return null;
   const purpose = Object.keys(PURPOSES).find((name) => PURPOSES[name].prefix === match[1]);
   if (!purpose) return null;
-  return { purpose, userId: Number(match[2]), filename: match[3], ext: match[4] };
+  return { purpose, userId: match[2].toLowerCase(), filename: match[3], ext: match[4] };
 };
 
 const isOwnedKey = (key, purpose, userId) => {
   const parsed = parseKey(key);
-  return Boolean(parsed) && parsed.purpose === purpose && parsed.userId === Number(userId);
+  return Boolean(parsed) && parsed.purpose === purpose && parsed.userId === String(userId).toLowerCase();
 };
 
 const publicUrl = (value) => {
@@ -262,8 +265,8 @@ const deletePrefix = async (prefix) => {
 };
 
 const deleteUserObjects = async (userId) => {
-  const id = Number(userId);
-  if (!Number.isInteger(id) || id <= 0) return 0;
+  const id = String(userId).toLowerCase();
+  if (!isUuid(id)) return 0;
   let deleted = 0;
   for (const prefix of ['avatars', 'posts', 'scans']) {
     deleted += await deletePrefix(`${prefix}/${id}/`);

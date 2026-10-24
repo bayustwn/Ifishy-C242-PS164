@@ -35,7 +35,7 @@ const completeUpload = guard('Error verifying upload', 'Failed to verify upload'
   if (!info) {
     return fail(res, 400, 'VALIDATION_ERROR', 'Invalid upload key');
   }
-  if (info.userId !== Number(req.user.id)) {
+  if (info.userId !== req.user.id) {
     return fail(res, 403, 'FORBIDDEN', 'Upload does not belong to this user');
   }
 
@@ -69,7 +69,7 @@ const deleteUpload = guard('Error deleting upload', 'Failed to delete upload', a
   if (!info) {
     return fail(res, 400, 'VALIDATION_ERROR', 'Invalid upload key');
   }
-  if (info.userId !== Number(req.user.id)) {
+  if (info.userId !== req.user.id) {
     return fail(res, 403, 'FORBIDDEN', 'Upload does not belong to this user');
   }
 

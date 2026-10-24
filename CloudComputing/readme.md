@@ -23,6 +23,7 @@ This API supports user management, community interaction, and article access. Th
 - Community posts, comments, replies, votes, shares, and bookmarks are available under `/community`, `/comments`, and `/bookmark`.
 - `/articles` and `/articles/:id` expose articles; `/article/scrape/:url` requires a Bearer token and only accepts public `http(s)` URLs (private, loopback, link-local, and metadata addresses are rejected).
 - `POST /scan-history` saves a scan, while `GET /scan-history/:userId` requires a token and only returns the caller's own history. An empty history returns `200` with `data: []`.
+- All resource IDs are UUID strings (`CHAR(36)`), including users, posts, comments, replies, bookmarks, articles, and scan history. Path and body IDs must be valid UUIDs; invalid IDs return `400` or `404`.
 - The backend does not expose `/predict`; prediction and image compression are handled on-device by the mobile app.
 
 ## Image Upload Flow
@@ -41,7 +42,7 @@ Upload policies:
 | `post` | `posts/{userId}/` | 10 MB | JPEG, PNG, WebP |
 | `scan` | `scans/{userId}/` | 15 MB | JPEG, PNG, WebP |
 
-Object keys use the format `{prefix}/{userId}/{uuid}.{ext}`. Uploaded images are public and served from `R2_PUBLIC_BASE_URL`. Upload IDs and keys are not secrets. There is no per-user upload quota; clients should compress images before requesting a presigned URL.
+Object keys use the format `{prefix}/{userId}/{uuid}.{ext}`, where `{userId}` is the user's UUID and `{uuid}` is a server-generated UUID. Uploaded images are public and served from `R2_PUBLIC_BASE_URL`. Upload IDs and keys are not secrets. There is no per-user upload quota; clients should compress images before requesting a presigned URL. Mobile clients must treat all IDs as strings, not integers.
 
 `DELETE /api/auth/uploads` removes an unattached upload. It returns `409 CONFLICT` when the key is still referenced by a profile photo, post, or scan. Replacing a profile photo or post image deletes the old object immediately, and deleting an account removes all of its objects; the cleanup script is only for orphaned objects left by interrupted operations.
 

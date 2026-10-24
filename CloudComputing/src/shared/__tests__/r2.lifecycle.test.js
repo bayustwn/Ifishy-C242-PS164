@@ -27,7 +27,8 @@ process.env.R2_PUBLIC_BASE_URL = 'https://media.example.com';
 
 const r2 = require('../r2');
 
-const key = 'scans/7/abc.jpg';
+const USER_ID = '00000000-0000-4000-8000-000000000009';
+const key = `scans/${USER_ID}/abc.jpg`;
 
 beforeEach(() => {
   mockSend.mockReset();
@@ -42,7 +43,7 @@ describe('verifyUpload lifecycle', () => {
 
     const result = await r2.verifyUpload(key);
 
-    expect(result).toEqual({ purpose: 'scan', userId: 7, filename: 'abc', ext: 'jpg', size: 4, contentType: 'image/jpeg' });
+    expect(result).toEqual({ purpose: 'scan', userId: USER_ID, filename: 'abc', ext: 'jpg', size: 4, contentType: 'image/jpeg' });
     expect(mockSend).toHaveBeenCalledTimes(2);
   });
 
@@ -67,7 +68,7 @@ describe('verifyUpload lifecycle', () => {
 
 describe('deleteKeys', () => {
   test('memecah lebih dari 1000 key menjadi batch', async () => {
-    const keys = Array.from({ length: 1001 }, (_, index) => `posts/1/${index}.jpg`);
+    const keys = Array.from({ length: 1001 }, (_, index) => `posts/${USER_ID}/${index}.jpg`);
 
     const deleted = await r2.deleteKeys(keys);
 
@@ -92,7 +93,7 @@ describe('deleteUserObjects', () => {
       return {};
     });
 
-    const deleted = await r2.deleteUserObjects(7);
+    const deleted = await r2.deleteUserObjects(USER_ID);
 
     expect(deleted).toBe(3);
     expect(mockSend).toHaveBeenCalledTimes(6);

@@ -4,6 +4,7 @@ const cache = require('../../shared/cache');
 const logger = require('../../shared/logger');
 const { sliceArgs } = require('../../shared/pagination');
 const { assertPublicHttpUrl } = require('../../shared/urlSafety');
+const { isUuid } = require('../../shared/id');
 
 const CACHE_KEY = 'articles:list:v1';
 
@@ -17,8 +18,8 @@ const toArticleRow = ({ id, title, content, author, publishedAt, coverImage }) =
 });
 
 const getArticleById = async (id) => {
-  if (!/^\d+$/.test(String(id ?? ''))) return null;
-  const article = await prisma.article.findUnique({ where: { id: Number(id) } });
+  if (!isUuid(id)) return null;
+  const article = await prisma.article.findUnique({ where: { id } });
   return article ? toArticleRow(article) : null;
 };
 

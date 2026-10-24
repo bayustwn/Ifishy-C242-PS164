@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const prisma = require('../../shared/prisma');
 const logger = require('../../shared/logger');
 const { publicUrl, deleteUserObjects } = require('../../shared/r2');
+const { isUuid } = require('../../shared/id');
 
 const toProfileRow = ({ id, username, email, profilePhoto }) => ({
   id,
@@ -51,14 +52,14 @@ const deleteUserAccount = async (userId) => {
 };
 
 const replaceProfilePhoto = async (userId, photoUrl) => {
-  const targetId = Number.isInteger(userId) ? userId : -1;
+  if (!isUuid(userId)) return null;
   const user = await prisma.user.findUnique({
-    where: { id: targetId },
+    where: { id: userId },
     select: { profilePhoto: true },
   });
   if (!user) return null;
 
-  await prisma.user.update({ where: { id: targetId }, data: { profilePhoto: photoUrl } });
+  await prisma.user.update({ where: { id: userId }, data: { profilePhoto: photoUrl } });
   return user.profilePhoto;
 };
 

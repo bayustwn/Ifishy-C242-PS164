@@ -40,12 +40,12 @@ const getScanHistoryById = guard('Error saat mengambil scan history', 'Gagal men
     return fail(res, 400, 'VALIDATION_ERROR', 'User ID diperlukan!');
   }
 
-  if (Number(parsed.data.userId) !== Number(req.user.id)) {
+  if (parsed.data.userId !== req.user.id) {
     return fail(res, 403, 'FORBIDDEN', 'You can only view your own scan history');
   }
 
   const histories = await scanService.getScanHistoriesByUserId(
-    Number(parsed.data.userId),
+    parsed.data.userId,
     parsePagination(req.query),
   );
   return ok(res, histories, 'Scan history berhasil diambil!');
